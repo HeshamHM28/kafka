@@ -45,6 +45,7 @@ public class RequestContext implements AuthorizableRequestContext {
     public final ClientInformation clientInformation;
     public final boolean fromPrivilegedListener;
     public final Optional<KafkaPrincipalSerde> principalSerde;
+    private final String listenerNameValue;
 
     public RequestContext(RequestHeader header,
                           String connectionId,
@@ -107,6 +108,7 @@ public class RequestContext implements AuthorizableRequestContext {
         this.clientInformation = clientInformation;
         this.fromPrivilegedListener = fromPrivilegedListener;
         this.principalSerde = principalSerde;
+        this.listenerNameValue = (listenerName == null) ? null : listenerName.value();
     }
 
     public RequestAndSize parseRequest(ByteBuffer buffer) {
@@ -168,7 +170,11 @@ public class RequestContext implements AuthorizableRequestContext {
 
     @Override
     public String listenerName() {
-        return listenerName.value();
+        // Preserve original NullPointerException behavior if listenerName is null.
+        if (listenerName == null) {
+            throw new NullPointerException();
+        }
+        return listenerNameValue;
     }
 
     @Override
