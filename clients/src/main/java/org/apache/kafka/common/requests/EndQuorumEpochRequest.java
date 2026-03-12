@@ -67,7 +67,8 @@ public class EndQuorumEpochRequest extends AbstractRequest {
     }
 
     public static EndQuorumEpochRequest parse(Readable readable, short version) {
-        return new EndQuorumEpochRequest(new EndQuorumEpochRequestData(readable, version), version);
+        final EndQuorumEpochRequestData requestData = new EndQuorumEpochRequestData(readable, version);
+        return new EndQuorumEpochRequest(requestData, version);
     }
 
     public static EndQuorumEpochRequestData singletonRequest(TopicPartition topicPartition,
