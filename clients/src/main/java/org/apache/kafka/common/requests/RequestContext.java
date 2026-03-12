@@ -45,6 +45,8 @@ public class RequestContext implements AuthorizableRequestContext {
     public final ClientInformation clientInformation;
     public final boolean fromPrivilegedListener;
     public final Optional<KafkaPrincipalSerde> principalSerde;
+    private static final Optional<Integer> EMPTY_PORT = Optional.empty();
+    private static final Optional<KafkaPrincipalSerde> EMPTY_SERDE = Optional.empty();
 
     public RequestContext(RequestHeader header,
                           String connectionId,
@@ -57,13 +59,13 @@ public class RequestContext implements AuthorizableRequestContext {
         this(header,
             connectionId,
             clientAddress,
-            Optional.empty(),
+            EMPTY_PORT,
             principal,
             listenerName,
             securityProtocol,
             clientInformation,
             fromPrivilegedListener,
-            Optional.empty());
+            EMPTY_SERDE);
     }
 
     public RequestContext(RequestHeader header,
@@ -84,7 +86,7 @@ public class RequestContext implements AuthorizableRequestContext {
             securityProtocol,
             clientInformation,
             fromPrivilegedListener,
-            Optional.empty());
+            EMPTY_SERDE);
     }
 
     public RequestContext(RequestHeader header,
