@@ -97,17 +97,22 @@ public class EndQuorumEpochRequest extends AbstractRequest {
     }
 
     public static List<EndQuorumEpochRequestData.ReplicaInfo> preferredCandidates(EndQuorumEpochRequestData.PartitionData partition) {
-        if (partition.preferredCandidates().isEmpty()) {
-            return partition
-                .preferredSuccessors()
-                .stream()
-                .map(id -> new EndQuorumEpochRequestData.ReplicaInfo()
+        List<EndQuorumEpochRequestData.ReplicaInfo> candidates = partition.preferredCandidates();
+        if (candidates.isEmpty()) {
+            List<Integer> successors = partition.preferredSuccessors();
+            int size = successors.size();
+            java.util.List<EndQuorumEpochRequestData.ReplicaInfo> result = new java.util.ArrayList<>(size);
+            final Uuid zero = Uuid.ZERO_UUID;
+            for (int i = 0; i < size; i++) {
+                Integer id = successors.get(i);
+                result.add(new EndQuorumEpochRequestData.ReplicaInfo()
                     .setCandidateId(id)
-                    .setCandidateDirectoryId(Uuid.ZERO_UUID)
-                )
-                .collect(Collectors.toList());
+                    .setCandidateDirectoryId(zero)
+                );
+            }
+            return result;
         } else {
-            return partition.preferredCandidates();
+            return candidates;
         }
     }
 }
