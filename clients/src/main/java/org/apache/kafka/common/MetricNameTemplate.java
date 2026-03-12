@@ -47,7 +47,12 @@ public class MetricNameTemplate {
         this.name = Objects.requireNonNull(name);
         this.group = Objects.requireNonNull(group);
         this.description = Objects.requireNonNull(description);
-        this.tags = new LinkedHashSet<>(Objects.requireNonNull(tagsNames));
+        Set<String> tn = Objects.requireNonNull(tagsNames);
+        // Pre-size the LinkedHashSet to avoid rehashing when adding elements.
+        int size = tn.size();
+        int capacity = Math.max((int) (size / 0.75f) + 1, 16);
+        this.tags = new LinkedHashSet<>(capacity);
+        this.tags.addAll(tn);
     }
 
     /**
