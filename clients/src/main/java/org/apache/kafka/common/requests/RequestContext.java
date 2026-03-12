@@ -45,6 +45,7 @@ public class RequestContext implements AuthorizableRequestContext {
     public final ClientInformation clientInformation;
     public final boolean fromPrivilegedListener;
     public final Optional<KafkaPrincipalSerde> principalSerde;
+    private transient volatile String cachedToString;
 
     public RequestContext(RequestHeader header,
                           String connectionId,
@@ -208,16 +209,24 @@ public class RequestContext implements AuthorizableRequestContext {
 
     @Override
     public String toString() {
-        return "RequestContext(" +
-            "header=" + header +
-            ", connectionId='" + connectionId + '\'' +
-            ", clientAddress=" + clientAddress +
-            ", principal=" + principal +
-            ", listenerName=" + listenerName +
-            ", securityProtocol=" + securityProtocol +
-            ", clientInformation=" + clientInformation +
-            ", fromPrivilegedListener=" + fromPrivilegedListener +
-            ", principalSerde=" + principalSerde +
-            ')';
+        String result = cachedToString;
+        if (result != null) {
+            return result;
+        }
+        StringBuilder sb = new StringBuilder(128);
+        sb.append("RequestContext(");
+        sb.append("header=").append(header);
+        sb.append(", connectionId='").append(connectionId).append('\'');
+        sb.append(", clientAddress=").append(clientAddress);
+        sb.append(", principal=").append(principal);
+        sb.append(", listenerName=").append(listenerName);
+        sb.append(", securityProtocol=").append(securityProtocol);
+        sb.append(", clientInformation=").append(clientInformation);
+        sb.append(", fromPrivilegedListener=").append(fromPrivilegedListener);
+        sb.append(", principalSerde=").append(principalSerde);
+        sb.append(')');
+        result = sb.toString();
+        cachedToString = result;
+        return result;
     }
 }
