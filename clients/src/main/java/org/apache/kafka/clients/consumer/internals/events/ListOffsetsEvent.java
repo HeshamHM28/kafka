@@ -51,8 +51,13 @@ public class ListOffsetsEvent extends CompletableApplicationEvent<Map<TopicParti
      * null {@link OffsetAndTimestamp} as value
      */
     public <T> Map<TopicPartition, T> emptyResults() {
-        Map<TopicPartition, T> result = new HashMap<>();
-        timestampsToSearch.keySet().forEach(tp -> result.put(tp, null));
+        int size = timestampsToSearch.size();
+        // Pre-size the map to avoid rehashing: capacity = (int)(size / loadFactor) + 1
+        int capacity = size <= 0 ? 1 : (int) (size / 0.75f) + 1;
+        Map<TopicPartition, T> result = new HashMap<>(capacity);
+        for (TopicPartition tp : timestampsToSearch.keySet()) {
+            result.put(tp, null);
+        }
         return result;
     }
 
