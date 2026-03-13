@@ -389,7 +389,8 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     @Override
     public long checksum() {
-        return ByteUtils.readUnsignedInt(buffer, CRC_OFFSET);
+        // Inline readUnsignedInt to avoid an extra method call and reduce overhead.
+        return ((long) buffer.getInt(CRC_OFFSET)) & 0xFFFFFFFFL;
     }
 
     public boolean isValid() {
