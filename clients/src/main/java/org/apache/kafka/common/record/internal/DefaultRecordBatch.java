@@ -319,7 +319,8 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     @Override
     public Iterator<Record> iterator() {
-        if (count() == 0)
+        int count = count();
+        if (count == 0)
             return Collections.emptyIterator();
 
         if (!isCompressed())
@@ -328,12 +329,20 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         // for a normal iterator, we cannot ensure that the underlying compression stream is closed,
         // so we decompress the full record set here. Use cases which call for a lower memory footprint
         // can use `streamingIterator` at the cost of additional complexity
-        try (CloseableIterator<Record> iterator = compressedIterator(BufferSupplier.NO_CACHING, false)) {
-            List<Record> records = new ArrayList<>(count());
+        CloseableIterator<Record> iterator = compressedIterator(BufferSupplier.NO_CACHING, false);
+        List<Record> records = new ArrayList<>(count);
+        try {
             while (iterator.hasNext())
                 records.add(iterator.next());
-            return records.iterator();
+        } finally {
+            try {
+                iterator.close();
+            } catch (RuntimeException e) {
+                // Preserve original behavior: propagate any runtime exception from close
+                throw e;
+            }
         }
+        return records.iterator();
     }
 
     @Override
