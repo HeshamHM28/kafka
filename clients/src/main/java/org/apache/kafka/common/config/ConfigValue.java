@@ -29,7 +29,7 @@ public class ConfigValue {
     private boolean visible;
 
     public ConfigValue(String name) {
-        this(name, null, new ArrayList<>(), new ArrayList<>());
+        this(name, null, new ArrayList<>(0), new ArrayList<>(0));
     }
 
     public ConfigValue(String name, Object value, List<Object> recommendedValues, List<String> errorMessages) {
