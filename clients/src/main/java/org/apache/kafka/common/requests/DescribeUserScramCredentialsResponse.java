@@ -38,7 +38,7 @@ public class DescribeUserScramCredentialsResponse extends AbstractResponse {
     }
 
     @Override
-    public boolean shouldClientThrottle(short version) {
+    public final boolean shouldClientThrottle(short version) {
         return true;
     }
 
