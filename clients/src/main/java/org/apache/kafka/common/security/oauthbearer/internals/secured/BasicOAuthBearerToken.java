@@ -62,6 +62,23 @@ public class BasicOAuthBearerToken implements OAuthBearerToken {
      *                      non-negative if a non-<code>null</code> value is provided.
      */
 
+    /**
+     * Creates a new OAuthBearerToken instance around the given values.
+     *
+     * @param token         Value containing the compact serialization as a base 64 string that
+     *                      can be parsed, decoded, and validated as a well-formed JWS. Must be
+     *                      non-<code>null</code>, non-blank, and non-whitespace only.
+     * @param scopes        Set of non-<code>null</code> scopes. May contain case-sensitive
+     *                      "duplicates". The given set is copied and made unmodifiable so neither
+     *                      the caller of this constructor nor any downstream users can modify it.
+     * @param lifetimeMs    The token's lifetime, expressed as the number of milliseconds since the
+     *                      epoch. Must be non-negative.
+     * @param principalName The name of the principal to which this credential applies. Must be
+     *                      non-<code>null</code>, non-blank, and non-whitespace only.
+     * @param startTimeMs   The token's start time, expressed as the number of milliseconds since
+     *                      the epoch, if available, otherwise <code>null</code>. Must be
+     *                      non-negative if a non-<code>null</code> value is provided.
+     */
     public BasicOAuthBearerToken(String token,
         Set<String> scopes,
         long lifetimeMs,
@@ -152,13 +169,21 @@ public class BasicOAuthBearerToken implements OAuthBearerToken {
 
     @Override
     public String toString() {
-        return new StringJoiner(", ", BasicOAuthBearerToken.class.getSimpleName() + "[", "]")
-            .add("token='" + token + "'")
-            .add("scopes=" + scopes)
-            .add("lifetimeMs=" + lifetimeMs)
-            .add("principalName='" + principalName + "'")
-            .add("startTimeMs=" + startTimeMs)
-            .toString();
+        // Pre-calculate approximate capacity to avoid StringBuilder resizing
+        int capacity = 50 + 
+                       (token != null ? token.length() : 0) + 
+                       (principalName != null ? principalName.length() : 0) +
+                       (scopes != null ? scopes.toString().length() : 0);
+        
+        StringBuilder sb = new StringBuilder(capacity);
+        sb.append("BasicOAuthBearerToken[");
+        sb.append("token='").append(token).append('\'');
+        sb.append(", scopes=").append(scopes);
+        sb.append(", lifetimeMs=").append(lifetimeMs);
+        sb.append(", principalName='").append(principalName).append('\'');
+        sb.append(", startTimeMs=").append(startTimeMs);
+        sb.append(']');
+        return sb.toString();
     }
 
 }
