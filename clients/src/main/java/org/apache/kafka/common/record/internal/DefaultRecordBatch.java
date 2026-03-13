@@ -137,14 +137,16 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
     private static final byte TIMESTAMP_TYPE_MASK = 0x08;
 
     private final ByteBuffer buffer;
+    private final byte magic;
 
     DefaultRecordBatch(ByteBuffer buffer) {
         this.buffer = buffer;
+        this.magic = buffer.get(MAGIC_OFFSET);
     }
 
     @Override
     public byte magic() {
-        return buffer.get(MAGIC_OFFSET);
+        return magic;
     }
 
     @Override
