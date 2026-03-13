@@ -25,10 +25,13 @@ public class ClientInformation {
 
     private final String softwareName;
     private final String softwareVersion;
+    private final int hashCodeCache;
 
     public ClientInformation(String softwareName, String softwareVersion) {
         this.softwareName = softwareName.isEmpty() ? UNKNOWN_NAME_OR_VERSION : softwareName;
         this.softwareVersion = softwareVersion.isEmpty() ? UNKNOWN_NAME_OR_VERSION : softwareVersion;
+        // Compute and cache hash code once to accelerate equals/hashCode hot paths
+        this.hashCodeCache = 31 * this.softwareName.hashCode() + this.softwareVersion.hashCode();
     }
 
     public String softwareName() {
@@ -52,13 +55,16 @@ public class ClientInformation {
 
     @Override
     public boolean equals(Object o) {
-        if (o == null) {
-            return false;
+        if (this == o) {
+            return true;
         }
         if (!(o instanceof ClientInformation)) {
             return false;
         }
         ClientInformation other = (ClientInformation) o;
+        if (this.hashCodeCache != other.hashCodeCache) {
+            return false;
+        }
         return other.softwareName.equals(softwareName) &&
             other.softwareVersion.equals(softwareVersion);
     }
