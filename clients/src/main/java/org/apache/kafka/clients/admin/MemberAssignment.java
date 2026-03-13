@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
  */
 public class MemberAssignment {
     private final Set<TopicPartition> topicPartitions;
+    private final int cachedHash;
 
     /**
      * Creates an instance with the specified parameters.
@@ -36,6 +37,8 @@ public class MemberAssignment {
      */
     public MemberAssignment(Set<TopicPartition> topicPartitions) {
         this.topicPartitions = topicPartitions == null ? Collections.emptySet() : Set.copyOf(topicPartitions);
+        // Cache the hash code to avoid recomputing Set.hashCode() on each call to hashCode()
+        this.cachedHash = this.topicPartitions != null ? this.topicPartitions.hashCode() : 0;
     }
 
     @Override
@@ -50,7 +53,7 @@ public class MemberAssignment {
 
     @Override
     public int hashCode() {
-        return topicPartitions != null ? topicPartitions.hashCode() : 0;
+        return cachedHash;
     }
 
     /**
