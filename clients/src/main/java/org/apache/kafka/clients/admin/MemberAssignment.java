@@ -45,7 +45,7 @@ public class MemberAssignment {
 
         MemberAssignment that = (MemberAssignment) o;
 
-        return Objects.equals(topicPartitions, that.topicPartitions);
+        return topicPartitions.equals(that.topicPartitions);
     }
 
     @Override
