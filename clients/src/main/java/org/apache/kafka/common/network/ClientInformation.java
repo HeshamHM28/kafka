@@ -25,10 +25,14 @@ public class ClientInformation {
 
     private final String softwareName;
     private final String softwareVersion;
+    private final String cachedToString;
 
     public ClientInformation(String softwareName, String softwareVersion) {
         this.softwareName = softwareName.isEmpty() ? UNKNOWN_NAME_OR_VERSION : softwareName;
         this.softwareVersion = softwareVersion.isEmpty() ? UNKNOWN_NAME_OR_VERSION : softwareVersion;
+        // Cache the string representation to avoid repeated allocations in hot toString() path.
+        this.cachedToString = "ClientInformation(softwareName=" + this.softwareName +
+            ", softwareVersion=" + this.softwareVersion + ")";
     }
 
     public String softwareName() {
@@ -41,8 +45,7 @@ public class ClientInformation {
 
     @Override
     public String toString() {
-        return "ClientInformation(softwareName=" + softwareName +
-            ", softwareVersion=" + softwareVersion + ")";
+        return cachedToString;
     }
 
     @Override
