@@ -413,7 +413,13 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
             return false;
 
         DefaultRecordBatch that = (DefaultRecordBatch) o;
-        return Objects.equals(buffer, that.buffer);
+        // Inline null/identity checks to avoid the extra Objects.equals indirection and provide a fast-path
+        // when both batches reference the exact same ByteBuffer.
+        if (buffer == that.buffer)
+            return true;
+        if (buffer == null || that.buffer == null)
+            return false;
+        return buffer.equals(that.buffer);
     }
 
     @Override
