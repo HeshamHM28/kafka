@@ -61,11 +61,11 @@ public class AssignReplicasToDirsRequest extends AbstractRequest {
 
     @Override
     public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        return new AssignReplicasToDirsResponse(
-                new AssignReplicasToDirsResponseData()
-                        .setThrottleTimeMs(throttleTimeMs)
-                        .setErrorCode(Errors.forException(e).code())
-        );
+        short errorCode = Errors.forException(e).code();
+        AssignReplicasToDirsResponseData responseData = new AssignReplicasToDirsResponseData();
+        responseData.setThrottleTimeMs(throttleTimeMs);
+        responseData.setErrorCode(errorCode);
+        return new AssignReplicasToDirsResponse(responseData);
     }
 
     @Override
