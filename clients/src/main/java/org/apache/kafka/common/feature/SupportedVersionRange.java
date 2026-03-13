@@ -37,9 +37,17 @@ public class SupportedVersionRange extends BaseVersionRange {
     }
 
     public static SupportedVersionRange fromMap(Map<String, Short> versionRangeMap) {
-        return new SupportedVersionRange(
-            BaseVersionRange.valueOrThrow(MIN_VERSION_KEY_LABEL, versionRangeMap),
-            BaseVersionRange.valueOrThrow(MAX_VERSION_KEY_LABEL, versionRangeMap));
+        // Fast path: obtain both values once to avoid repeated map lookups when keys are present.
+        Short min = versionRangeMap.get(MIN_VERSION_KEY_LABEL);
+        Short max = versionRangeMap.get(MAX_VERSION_KEY_LABEL);
+        if (min == null || max == null) {
+            // If either is missing/null, delegate to BaseVersionRange.valueOrThrow to preserve
+            // the original exception behavior and messages.
+            return new SupportedVersionRange(
+                BaseVersionRange.valueOrThrow(MIN_VERSION_KEY_LABEL, versionRangeMap),
+                BaseVersionRange.valueOrThrow(MAX_VERSION_KEY_LABEL, versionRangeMap));
+        }
+        return new SupportedVersionRange(min.shortValue(), max.shortValue());
     }
 
     /**
