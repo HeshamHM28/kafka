@@ -88,7 +88,7 @@ public enum AclPermissionType {
     /**
      * Return the code of this permission type.
      */
-    public byte code() {
+    public final byte code() {
         return code;
     }
 
