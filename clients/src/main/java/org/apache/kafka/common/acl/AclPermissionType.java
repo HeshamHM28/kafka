@@ -61,11 +61,27 @@ public enum AclPermissionType {
     * @return       The AclPermissionType, or UNKNOWN if the string could not be matched.
     */
     public static AclPermissionType fromString(String str) {
-        try {
-            return AclPermissionType.valueOf(str.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException e) {
+        // Preserve original NullPointerException behavior when str is null.
+        if (str == null) {
+            throw new NullPointerException();
+        }
+
+        // Use length checks + regionMatches(ignoreCase) to avoid creating upper-case strings
+        // and to avoid exception overhead from Enum.valueOf on non-matching input.
+        int len = str.length();
+        if (len == 7 && str.regionMatches(true, 0, "UNKNOWN", 0, 7)) {
             return UNKNOWN;
         }
+        if (len == 3 && str.regionMatches(true, 0, "ANY", 0, 3)) {
+            return ANY;
+        }
+        if (len == 4 && str.regionMatches(true, 0, "DENY", 0, 4)) {
+            return DENY;
+        }
+        if (len == 5 && str.regionMatches(true, 0, "ALLOW", 0, 5)) {
+            return ALLOW;
+        }
+        return UNKNOWN;
     }
 
     /**
