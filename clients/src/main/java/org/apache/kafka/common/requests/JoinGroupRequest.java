@@ -208,6 +208,7 @@ public class JoinGroupRequest extends AbstractRequest {
     }
 
     public static JoinGroupRequest parse(Readable readable, short version) {
-        return new JoinGroupRequest(new JoinGroupRequestData(readable, version), version);
+        final JoinGroupRequestData requestData = new JoinGroupRequestData(readable, version);
+        return new JoinGroupRequest(requestData, version);
     }
 }
