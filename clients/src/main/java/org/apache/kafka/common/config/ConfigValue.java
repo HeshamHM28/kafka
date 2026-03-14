@@ -81,11 +81,12 @@ public class ConfigValue {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ConfigValue that = (ConfigValue) o;
-        return Objects.equals(name, that.name) &&
-               Objects.equals(value, that.value) &&
-               Objects.equals(recommendedValues, that.recommendedValues) &&
-               Objects.equals(errorMessages, that.errorMessages) &&
-               Objects.equals(visible, that.visible);
+        // Compare primitive first to avoid boxing and early exit on inequality
+        if (visible != that.visible) return false;
+        if (!Objects.equals(name, that.name)) return false;
+        if (!Objects.equals(value, that.value)) return false;
+        if (!Objects.equals(recommendedValues, that.recommendedValues)) return false;
+        return Objects.equals(errorMessages, that.errorMessages);
     }
 
     @Override
