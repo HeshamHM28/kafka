@@ -23,10 +23,10 @@ import java.nio.ByteBuffer;
 public class VoidDeserializer implements Deserializer<Void> {
     @Override
     public Void deserialize(String topic, byte[] data) {
-        if (data != null)
-            throw new IllegalArgumentException("Data should be null for a VoidDeserializer.");
+        if (data == null)
+            return null;
 
-        return null;
+        throw new IllegalArgumentException("Data should be null for a VoidDeserializer.");
     }
 
     @Override
