@@ -99,7 +99,20 @@ public class DefaultSslEngineFactory implements SslEngineFactory {
 
     @Override
     public SSLEngine createServerSslEngine(String peerHost, int peerPort) {
-        return createSslEngine(ConnectionMode.SERVER, peerHost, peerPort, null);
+        // Inlined hot-path of createSslEngine for SERVER mode to avoid an extra method call
+        SSLEngine sslEngine = sslContext.createSSLEngine(peerHost, peerPort);
+        if (cipherSuites != null) sslEngine.setEnabledCipherSuites(cipherSuites);
+        if (enabledProtocols != null) sslEngine.setEnabledProtocols(enabledProtocols);
+
+        // SERVER mode specific configuration
+        sslEngine.setUseClientMode(false);
+        // Avoid repeated enum comparisons and branches by using straightforward checks
+        if (sslClientAuth == SslClientAuth.REQUIRED) {
+            sslEngine.setNeedClientAuth(true);
+        } else if (sslClientAuth == SslClientAuth.REQUESTED) {
+            sslEngine.setWantClientAuth(true);
+        }
+        return sslEngine;
     }
 
     @Override
