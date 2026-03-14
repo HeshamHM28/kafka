@@ -256,7 +256,11 @@ class OffsetFetcherUtils {
     }
 
     static Set<String> topicsForPartitions(Collection<TopicPartition> partitions) {
-        return partitions.stream().map(TopicPartition::topic).collect(Collectors.toSet());
+        Set<String> topics = new HashSet<>(partitions.size());
+        for (TopicPartition partition : partitions) {
+            topics.add(partition.topic());
+        }
+        return topics;
     }
 
     void updateSubscriptionState(Map<TopicPartition, OffsetFetcherUtils.ListOffsetData> fetchedOffsets,
