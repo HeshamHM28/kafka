@@ -163,10 +163,7 @@ public class JoinGroupRequest extends AbstractRequest {
      */
     public static String joinReason(JoinGroupRequestData request) {
         String joinReason = request.reason();
-        if (joinReason == null || joinReason.isEmpty()) {
-            joinReason = "not provided";
-        }
-        return joinReason;
+        return (joinReason == null || joinReason.isEmpty()) ? "not provided" : joinReason;
     }
 
     public JoinGroupRequest(JoinGroupRequestData data, short version) {
