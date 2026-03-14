@@ -95,12 +95,14 @@ public class ConfigValue {
 
     @Override
     public String toString() {
-        return "[" +
-                name + "," +
-                value + "," +
-                recommendedValues + "," +
-                errorMessages + "," +
-                visible +
-                "]";
+        StringBuilder sb = new StringBuilder(128);
+        sb.append('[')
+          .append(name).append(',')
+          .append(value).append(',')
+          .append(recommendedValues).append(',')
+          .append(errorMessages).append(',')
+          .append(visible)
+          .append(']');
+        return sb.toString();
     }
 }
