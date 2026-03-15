@@ -47,6 +47,8 @@ public class ApiVersionsResponse extends AbstractResponse {
     public static final long UNKNOWN_FINALIZED_FEATURES_EPOCH = -1L;
 
     private final ApiVersionsResponseData data;
+    private final ApiVersion[] apiVersionCache;
+    private final int apiVersionCacheOffset;
 
     public static class Builder {
         private Errors error = Errors.NONE;
@@ -116,6 +118,30 @@ public class ApiVersionsResponse extends AbstractResponse {
     public ApiVersionsResponse(ApiVersionsResponseData data) {
         super(ApiKeys.API_VERSIONS);
         this.data = data;
+
+        ApiVersionCollection apiKeys = data.apiKeys();
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
+        int count = 0;
+        for (ApiVersion v : apiKeys) {
+            int k = v.apiKey();
+            if (k < min) min = k;
+            if (k > max) max = k;
+            count++;
+        }
+
+        if (count == 0) {
+            this.apiVersionCache = new ApiVersion[0];
+            this.apiVersionCacheOffset = 0;
+        } else {
+            int len = max - min + 1;
+            ApiVersion[] cache = new ApiVersion[len];
+            for (ApiVersion v : apiKeys) {
+                cache[v.apiKey() - min] = v;
+            }
+            this.apiVersionCache = cache;
+            this.apiVersionCacheOffset = min;
+        }
     }
 
     @Override
@@ -124,6 +150,14 @@ public class ApiVersionsResponse extends AbstractResponse {
     }
 
     public ApiVersion apiVersion(short apiKey) {
+        int k = apiKey;
+        ApiVersion[] cache = this.apiVersionCache;
+        if (cache.length != 0) {
+            int idx = k - this.apiVersionCacheOffset;
+            if (idx >= 0 && idx < cache.length) {
+                return cache[idx];
+            }
+        }
         return data.apiKeys().find(apiKey);
     }
 
