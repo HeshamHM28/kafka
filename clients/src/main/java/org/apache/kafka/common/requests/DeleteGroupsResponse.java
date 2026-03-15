@@ -40,10 +40,17 @@ import java.util.Map;
 public class DeleteGroupsResponse extends AbstractResponse {
 
     private final DeleteGroupsResponseData data;
+    private final Map<String, Errors> resultsByGroup;
 
     public DeleteGroupsResponse(DeleteGroupsResponseData data) {
         super(ApiKeys.DELETE_GROUPS);
         this.data = data;
+        // Precompute a map from group id to Errors for O(1) lookups on get(...)
+        Map<String, Errors> map = new HashMap<>();
+        for (DeletableGroupResult result : data.results()) {
+            map.put(result.groupId(), Errors.forCode(result.errorCode()));
+        }
+        this.resultsByGroup = map;
     }
 
     @Override
@@ -60,11 +67,11 @@ public class DeleteGroupsResponse extends AbstractResponse {
     }
 
     public Errors get(String group) throws IllegalArgumentException {
-        DeletableGroupResult result = data.results().find(group);
-        if (result == null) {
+        Errors error = resultsByGroup.get(group);
+        if (error == null) {
             throw new IllegalArgumentException("could not find group " + group + " in the delete group response");
         }
-        return Errors.forCode(result.errorCode());
+        return error;
     }
 
     @Override
