@@ -32,6 +32,7 @@ public class KerberosName {
     private final String hostName;
     /** The realm of the name. */
     private final String realm;
+    private final String stringRepresentation;
 
     /**
      * Creates an instance of `KerberosName` with the provided parameters.
@@ -42,6 +43,7 @@ public class KerberosName {
         this.serviceName = serviceName;
         this.hostName = hostName;
         this.realm = realm;
+        this.stringRepresentation = buildString();
     }
 
     /**
@@ -61,11 +63,12 @@ public class KerberosName {
     }
 
     /**
-     * Put the name back together from the parts.
+     * Build the string representation from the parts.
      */
-    @Override
-    public String toString() {
-        StringBuilder result = new StringBuilder();
+    private String buildString() {
+        StringBuilder result = new StringBuilder(serviceName.length() + 
+            (hostName != null ? hostName.length() + 1 : 0) + 
+            (realm != null ? realm.length() + 1 : 0));
         result.append(serviceName);
         if (hostName != null) {
             result.append('/');
@@ -76,6 +79,14 @@ public class KerberosName {
             result.append(realm);
         }
         return result.toString();
+    }
+
+    /**
+     * Put the name back together from the parts.
+     */
+    @Override
+    public String toString() {
+        return stringRepresentation;
     }
 
     /**
