@@ -336,7 +336,8 @@ public final class RefreshingHttpsJwks implements OAuthBearerConfigurable {
      */
 
     public boolean maybeExpediteRefresh(String keyId) {
-        if (keyId.length() > MISSING_KEY_ID_MAX_KEY_LENGTH) {
+        int keyIdLength = keyId.length();
+        if (keyIdLength > MISSING_KEY_ID_MAX_KEY_LENGTH) {
             // Although there's no limit on the length of the key ID, they're generally
             // "reasonably" short. If we have a very long key ID length, we're going to assume
             // the JWT is malformed, and we will not actually try to resolve the key.
@@ -345,12 +346,20 @@ public final class RefreshingHttpsJwks implements OAuthBearerConfigurable {
             //
             //     1. Don't try to resolve the key as the large ID will sit in our cache
             //     2. Report the issue in the logs but include only the first N characters
-            int actualLength = keyId.length();
+            int actualLength = keyIdLength;
             String trimmedKeyId = keyId.substring(0, MISSING_KEY_ID_MAX_KEY_LENGTH);
-            String snippet = String.format("%s (trimmed to first %d characters out of %d total)", trimmedKeyId, MISSING_KEY_ID_MAX_KEY_LENGTH, actualLength);
+            StringBuilder sb = new StringBuilder(trimmedKeyId.length() + 64);
+            sb.append(trimmedKeyId);
+            sb.append(" (trimmed to first ");
+            sb.append(MISSING_KEY_ID_MAX_KEY_LENGTH);
+            sb.append(" characters out of ");
+            sb.append(actualLength);
+            sb.append(" total)");
+            String snippet = sb.toString();
             log.warn("Key ID {} was too long to cache", snippet);
             return false;
         } else {
+            boolean shouldSchedule = false;
             try {
                 refreshLock.writeLock().lock();
 
@@ -363,13 +372,18 @@ public final class RefreshingHttpsJwks implements OAuthBearerConfigurable {
                     // or it has expired, schedule a refresh ASAP.
                     nextCheckTime = currTime + MISSING_KEY_ID_CACHE_IN_FLIGHT_MS;
                     missingKeyIds.put(keyId, nextCheckTime);
-                    executorService.schedule(this::refresh, 0, TimeUnit.MILLISECONDS);
+                    shouldSchedule = true;
                     return true;
                 } else {
                     return false;
                 }
             } finally {
                 refreshLock.writeLock().unlock();
+                // Schedule outside of the lock to avoid performing potentially expensive operations
+                // while holding the write lock, reducing contention on the hot path.
+                if (shouldSchedule) {
+                    executorService.schedule(this::refresh, 0, TimeUnit.MILLISECONDS);
+                }
             }
         }
     }
