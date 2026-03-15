@@ -48,15 +48,33 @@ public class KerberosName {
      * Create a name from the full Kerberos principal name.
      */
     public static KerberosName parse(String principalName) {
-        Matcher match = NAME_PARSER.matcher(principalName);
-        if (!match.matches()) {
-            if (principalName.contains("@")) {
-                throw new IllegalArgumentException("Malformed Kerberos name: " + principalName);
-            } else {
-                return new KerberosName(principalName, null, null);
-            }
+        // Fast-path: if there is no '@', return the whole principal as the service name.
+        int at = principalName.indexOf('@');
+        if (at == -1) {
+            return new KerberosName(principalName, null, null);
+        }
+
+        // Split into left (service[/host]) and realm parts.
+        String left = principalName.substring(0, at);
+        String realm = principalName.substring(at + 1);
+
+        // Validate realm: it must not contain '@' or '/'.
+        if (realm.indexOf('@') != -1 || realm.indexOf('/') != -1) {
+            throw new IllegalArgumentException("Malformed Kerberos name: " + principalName);
+        }
+
+        // Parse left into service and optional host (only one slash allowed).
+        int slash = left.indexOf('/');
+        if (slash == -1) {
+            return new KerberosName(left, null, realm);
         } else {
-            return new KerberosName(match.group(1), match.group(3), match.group(4));
+            // Reject if there is more than one slash.
+            if (left.indexOf('/', slash + 1) != -1) {
+                throw new IllegalArgumentException("Malformed Kerberos name: " + principalName);
+            }
+            String service = left.substring(0, slash);
+            String host = left.substring(slash + 1);
+            return new KerberosName(service, host, realm);
         }
     }
 
