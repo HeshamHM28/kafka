@@ -32,6 +32,9 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class SnappyCompression implements Compression {
+    private static final SnappyCompression INSTANCE = new SnappyCompression();
+    private static final int DECOMPRESSION_OUTPUT_SIZE = 2 * 1024;
+
 
     private SnappyCompression() {}
 
@@ -63,12 +66,16 @@ public class SnappyCompression implements Compression {
         }
     }
 
+    public static SnappyCompression getInstance() {
+        return INSTANCE;
+    }
+
     @Override
-    public int decompressionOutputSize() {
+    public final int decompressionOutputSize() {
         // SnappyInputStream already uses an intermediate buffer internally. The size
         // of this buffer is based on legacy implementation based on skipArray introduced in
         // https://github.com/apache/kafka/pull/6785
-        return 2 * 1024; // 2KB
+        return DECOMPRESSION_OUTPUT_SIZE;
     }
 
     @Override
