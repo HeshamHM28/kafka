@@ -66,13 +66,13 @@ public class SecurityUtils {
             throw new IllegalArgumentException("expected a string in format principalType:principalName but got " + str);
         }
 
-        String[] split = str.split(":", 2);
+        int idx = str.indexOf(':');
 
-        if (split.length != 2) {
+        if (idx == -1) {
             throw new IllegalArgumentException("expected a string in format principalType:principalName but got " + str);
         }
 
-        return new KafkaPrincipal(split[0], split[1]);
+        return new KafkaPrincipal(str.substring(0, idx), str.substring(idx + 1));
     }
 
     public static void addConfiguredSecurityProviders(Map<String, ?> configs) {
