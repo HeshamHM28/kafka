@@ -28,10 +28,12 @@ import java.util.Map;
 public class CreateDelegationTokenResponse extends AbstractResponse {
 
     private final CreateDelegationTokenResponseData data;
+    private final Errors cachedError;
 
     public CreateDelegationTokenResponse(CreateDelegationTokenResponseData data) {
         super(ApiKeys.CREATE_DELEGATION_TOKEN);
         this.data = data;
+        this.cachedError = Errors.forCode(data.errorCode());
     }
 
     public static CreateDelegationTokenResponse parse(Readable readable, short version) {
@@ -96,7 +98,7 @@ public class CreateDelegationTokenResponse extends AbstractResponse {
     }
 
     public boolean hasError() {
-        return error() != Errors.NONE;
+        return cachedError != Errors.NONE;
     }
 
     @Override
