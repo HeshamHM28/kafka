@@ -70,13 +70,15 @@ public class ShareGroupDescription {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         final ShareGroupDescription that = (ShareGroupDescription) o;
-        return Objects.equals(groupId, that.groupId) &&
-            Objects.equals(members, that.members) &&
-            groupState == that.groupState &&
-            Objects.equals(coordinator, that.coordinator) &&
-            groupEpoch == that.groupEpoch &&
+        // Check primitives first (fastest), then enums, then objects
+        // Order by likelihood of difference to fail fast
+        return groupEpoch == that.groupEpoch &&
             targetAssignmentEpoch == that.targetAssignmentEpoch &&
-            Objects.equals(authorizedOperations, that.authorizedOperations);
+            groupState == that.groupState &&
+            Objects.equals(groupId, that.groupId) &&
+            Objects.equals(coordinator, that.coordinator) &&
+            Objects.equals(authorizedOperations, that.authorizedOperations) &&
+            Objects.equals(members, that.members);
     }
 
     @Override
