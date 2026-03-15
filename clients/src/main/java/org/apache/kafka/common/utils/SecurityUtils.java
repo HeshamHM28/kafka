@@ -38,6 +38,7 @@ public class SecurityUtils {
     private static final Map<String, ResourceType> NAME_TO_RESOURCE_TYPES;
     private static final Map<String, AclOperation> NAME_TO_OPERATIONS;
     private static final Map<String, AclPermissionType> NAME_TO_PERMISSION_TYPES;
+    private static final String[] RESOURCE_TYPE_NAME_CACHE = new String[ResourceType.values().length];
 
     static {
         NAME_TO_RESOURCE_TYPES = new HashMap<>(ResourceType.values().length);
@@ -122,7 +123,14 @@ public class SecurityUtils {
     }
 
     public static String resourceTypeName(ResourceType resourceType) {
-        return toPascalCase(resourceType.name());
+        int idx = resourceType.ordinal();
+        String cached = RESOURCE_TYPE_NAME_CACHE[idx];
+        if (cached == null) {
+            String computed = toPascalCase(resourceType.name());
+            RESOURCE_TYPE_NAME_CACHE[idx] = computed;
+            return computed;
+        }
+        return cached;
     }
 
     public static String operationName(AclOperation operation) {
