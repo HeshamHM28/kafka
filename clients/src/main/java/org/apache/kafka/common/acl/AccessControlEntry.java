@@ -24,6 +24,7 @@ import java.util.Objects;
  */
 public class AccessControlEntry {
     final AccessControlEntryData data;
+    final boolean unknown;
 
     /**
      * Create an instance of an access control entry with the provided parameters.
@@ -43,6 +44,7 @@ public class AccessControlEntry {
         if (permissionType == AclPermissionType.ANY)
             throw new IllegalArgumentException("permissionType must not be ANY");
         this.data = new AccessControlEntryData(principal, host, operation, permissionType);
+        this.unknown = this.data.isUnknown();
     }
 
     /**
@@ -89,7 +91,7 @@ public class AccessControlEntry {
      * Return true if this AclResource has any UNKNOWN components.
      */
     public boolean isUnknown() {
-        return data.isUnknown();
+        return unknown;
     }
 
     @Override
