@@ -28,6 +28,7 @@ import java.util.Map;
 public class CreateDelegationTokenResponse extends AbstractResponse {
 
     private final CreateDelegationTokenResponseData data;
+    private volatile String cachedToString;
 
     public CreateDelegationTokenResponse(CreateDelegationTokenResponseData data) {
         super(ApiKeys.CREATE_DELEGATION_TOKEN);
@@ -107,9 +108,14 @@ public class CreateDelegationTokenResponse extends AbstractResponse {
     // Do not print tokenId and Hmac, overwrite a temp copy of the data with empty content
     @Override
     public String toString() {
-        CreateDelegationTokenResponseData tempData = data.duplicate();
-        tempData.setTokenId("REDACTED");
-        tempData.setHmac(new byte[0]);
-        return tempData.toString();
+        String result = cachedToString;
+        if (result == null) {
+            CreateDelegationTokenResponseData tempData = data.duplicate();
+            tempData.setTokenId("REDACTED");
+            tempData.setHmac(new byte[0]);
+            result = tempData.toString();
+            cachedToString = result;
+        }
+        return result;
     }
 }
