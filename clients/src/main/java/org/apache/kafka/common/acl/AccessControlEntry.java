@@ -94,10 +94,11 @@ public class AccessControlEntry {
 
     @Override
     public boolean equals(Object o) {
+        if (this == o)
+            return true;
         if (!(o instanceof AccessControlEntry))
             return false;
-        AccessControlEntry other = (AccessControlEntry) o;
-        return data.equals(other.data);
+        return data.equals(((AccessControlEntry) o).data);
     }
 
     @Override
