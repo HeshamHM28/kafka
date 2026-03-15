@@ -24,6 +24,7 @@ import java.util.Objects;
  */
 public class AccessControlEntry {
     final AccessControlEntryData data;
+    private final String cachedToString;
 
     /**
      * Create an instance of an access control entry with the provided parameters.
@@ -43,6 +44,8 @@ public class AccessControlEntry {
         if (permissionType == AclPermissionType.ANY)
             throw new IllegalArgumentException("permissionType must not be ANY");
         this.data = new AccessControlEntryData(principal, host, operation, permissionType);
+        // Cache the string representation since this object is immutable and toString() can be hot.
+        this.cachedToString = this.data.toString();
     }
 
     /**
@@ -82,7 +85,7 @@ public class AccessControlEntry {
 
     @Override
     public String toString() {
-        return data.toString();
+        return cachedToString;
     }
 
     /**
