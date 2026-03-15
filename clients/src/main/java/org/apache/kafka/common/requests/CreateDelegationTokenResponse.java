@@ -35,8 +35,8 @@ public class CreateDelegationTokenResponse extends AbstractResponse {
     }
 
     public static CreateDelegationTokenResponse parse(Readable readable, short version) {
-        return new CreateDelegationTokenResponse(
-            new CreateDelegationTokenResponseData(readable, version));
+        CreateDelegationTokenResponseData data = new CreateDelegationTokenResponseData(readable, version);
+        return new CreateDelegationTokenResponse(data);
     }
 
     public static CreateDelegationTokenResponse prepareResponse(int version,
