@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
  */
 public class ShareMemberAssignment {
     private final Set<TopicPartition> topicPartitions;
+    private final int cachedHashCode;
 
     /**
      * Creates an instance with the specified parameters.
@@ -36,6 +37,7 @@ public class ShareMemberAssignment {
      */
     public ShareMemberAssignment(Set<TopicPartition> topicPartitions) {
         this.topicPartitions = topicPartitions == null ? Collections.emptySet() : Set.copyOf(topicPartitions);
+        this.cachedHashCode = this.topicPartitions.hashCode();
     }
 
     @Override
@@ -50,7 +52,7 @@ public class ShareMemberAssignment {
 
     @Override
     public int hashCode() {
-        return topicPartitions != null ? topicPartitions.hashCode() : 0;
+        return topicPartitions != null ? cachedHashCode : 0;
     }
 
     /**
