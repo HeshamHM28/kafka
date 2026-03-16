@@ -82,10 +82,18 @@ public final class CollectionUtils {
         Function<String, T> buildGroup,
         BiConsumer<T, Integer> addToGroup
     ) {
-        Map<String, T> dataByTopic = new HashMap<>();
+        // Pre-size map to avoid rehashing - assuming most partitions have unique topics
+        // Using capacity calculation that accounts for HashMap's load factor (0.75)
+        int initialCapacity = (int) Math.ceil(partitions.size() / 0.75);
+        Map<String, T> dataByTopic = new HashMap<>(initialCapacity);
+        
         for (TopicPartition tp : partitions) {
             String topic = tp.topic();
-            T topicData = dataByTopic.computeIfAbsent(topic, buildGroup);
+            T topicData = dataByTopic.get(topic);
+            if (topicData == null) {
+                topicData = buildGroup.apply(topic);
+                dataByTopic.put(topic, topicData);
+            }
             addToGroup.accept(topicData, tp.partition());
         }
         return dataByTopic;
