@@ -65,11 +65,22 @@ public final class CollectionUtils {
      * @return partitions per topic
      */
     public static Map<String, List<Integer>> groupPartitionsByTopic(Collection<TopicPartition> partitions) {
-        return groupPartitionsByTopic(
-            partitions,
-            topic -> new ArrayList<>(),
-            List::add
-        );
+        // Preserve original NPE behavior for null input
+        int size = partitions.size();
+        // Pre-size the map to reduce rehashing. Use load factor 0.75 estimate.
+        int initialCapacity = Math.max(16, (int) (size / 0.75f) + 1);
+        Map<String, List<Integer>> result = new HashMap<>(initialCapacity);
+
+        for (TopicPartition tp : partitions) {
+            String topic = tp.topic();
+            List<Integer> list = result.get(topic);
+            if (list == null) {
+                list = new ArrayList<>();
+                result.put(topic, list);
+            }
+            list.add(tp.partition());
+        }
+        return result;
     }
 
     /**
