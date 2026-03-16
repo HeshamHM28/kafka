@@ -132,10 +132,13 @@ public class DescribeDelegationTokenResponse extends AbstractResponse {
     @Override
     public String toString() {
         DescribeDelegationTokenResponseData tempData = data.duplicate();
-        tempData.tokens().forEach(token -> {
+        List<DescribedDelegationToken> tokens = tempData.tokens();
+        int tokenCount = tokens.size();
+        for (int i = 0; i < tokenCount; i++) {
+            DescribedDelegationToken token = tokens.get(i);
             token.setTokenId("REDACTED");
             token.setHmac(new byte[0]);
-        });
+        }
         return tempData.toString();
     }
 }
