@@ -148,7 +148,8 @@ public class NetworkReceive implements Receive {
      * for use in metrics. This is consistent with {@link NetworkSend#size()}
      */
     public int size() {
-        return payload().limit() + size.limit();
+        // Inline buffer access to avoid the virtual call overhead of payload() in the hot path.
+        return buffer.limit() + size.limit();
     }
 
 }
