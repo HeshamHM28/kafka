@@ -50,8 +50,9 @@ public final class CollectionUtils {
     public static <T> Map<String, Map<Integer, T>> groupPartitionDataByTopic(Map<TopicPartition, ? extends T> data) {
         Map<String, Map<Integer, T>> dataByTopic = new HashMap<>();
         for (Map.Entry<TopicPartition, ? extends T> entry : data.entrySet()) {
-            String topic = entry.getKey().topic();
-            int partition = entry.getKey().partition();
+            TopicPartition topicPartition = entry.getKey();
+            String topic = topicPartition.topic();
+            int partition = topicPartition.partition();
             Map<Integer, T> topicData = dataByTopic.computeIfAbsent(topic, t -> new HashMap<>());
             topicData.put(partition, entry.getValue());
         }
