@@ -45,7 +45,14 @@ public class ShareMemberAssignment {
 
         ShareMemberAssignment that = (ShareMemberAssignment) o;
 
-        return Objects.equals(topicPartitions, that.topicPartitions);
+        // Fast-path: identical set reference
+        if (this.topicPartitions == that.topicPartitions) return true;
+
+        // Both topicPartitions are non-null due to constructor; compare sizes first for a cheap mismatch check
+        if (this.topicPartitions.size() != that.topicPartitions.size()) return false;
+
+        // Use containsAll which is typically O(n) with O(1) lookups for hash-based sets
+        return this.topicPartitions.containsAll(that.topicPartitions);
     }
 
     @Override
