@@ -28,9 +28,10 @@ import java.util.Map;
 public class CreatePartitionsResponse extends AbstractResponse {
 
     private final CreatePartitionsResponseData data;
+    private static final ApiKeys API_KEY = ApiKeys.CREATE_PARTITIONS;
 
     public CreatePartitionsResponse(CreatePartitionsResponseData data) {
-        super(ApiKeys.CREATE_PARTITIONS);
+        super(API_KEY);
         this.data = data;
     }
 
