@@ -195,10 +195,12 @@ public class ClientTelemetryUtils {
     public static CompressionType preferredCompressionType(List<CompressionType> acceptedCompressionTypes, Set<CompressionType> unsupportedCompressionTypes) {
         // Broker is providing the compression types in order of preference. Grab the
         // first one that's supported.
-        return acceptedCompressionTypes.stream()
-                .filter(t -> !unsupportedCompressionTypes.contains(t))
-                .findFirst()
-                .orElse(CompressionType.NONE);
+        for (CompressionType type : acceptedCompressionTypes) {
+            if (!unsupportedCompressionTypes.contains(type)) {
+                return type;
+            }
+        }
+        return CompressionType.NONE;
     }
 
     public static ByteBuffer compress(MetricsData metrics, CompressionType compressionType) throws IOException {
