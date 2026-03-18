@@ -33,6 +33,7 @@ public class MetricNameTemplate {
     private final String group;
     private final String description;
     private final LinkedHashSet<String> tags;
+    private transient volatile String cachedToString;
 
     /**
      * Create a new template. Note that the order of the tags will be preserved if the supplied
@@ -47,7 +48,12 @@ public class MetricNameTemplate {
         this.name = Objects.requireNonNull(name);
         this.group = Objects.requireNonNull(group);
         this.description = Objects.requireNonNull(description);
-        this.tags = new LinkedHashSet<>(Objects.requireNonNull(tagsNames));
+        Objects.requireNonNull(tagsNames);
+        // Pre-size LinkedHashSet to avoid rehashing: capacity = size / loadFactor + 1
+        // Default load factor is 0.75, so capacity should be size * 4/3 + 1
+        int capacity = (int) (tagsNames.size() / 0.75f) + 1;
+        this.tags = new LinkedHashSet<>(capacity);
+        this.tags.addAll(tagsNames);
     }
 
     /**
@@ -59,7 +65,15 @@ public class MetricNameTemplate {
      * @param tagsNames the names of the metric tags in the preferred order; none of the tag names should be null
      */
     public MetricNameTemplate(String name, String group, String description, String... tagsNames) {
-        this(name, group, description, getTags(tagsNames));
+        this.name = Objects.requireNonNull(name);
+        this.group = Objects.requireNonNull(group);
+        this.description = Objects.requireNonNull(description);
+        // Pre-size LinkedHashSet and populate directly from array
+        int capacity = (int) (tagsNames.length / 0.75f) + 1;
+        this.tags = new LinkedHashSet<>(capacity);
+        for (String tagName : tagsNames) {
+            this.tags.add(tagName);
+        }
     }
 
     private static LinkedHashSet<String> getTags(String... keys) {
@@ -124,6 +138,17 @@ public class MetricNameTemplate {
 
     @Override
     public String toString() {
-        return String.format("name=%s, group=%s, tags=%s", name, group, tags);
+        String s = cachedToString;
+        if (s == null) {
+            // Compute tags' string once to avoid double toString calls when sizing/appending.
+            String tagsStr = tags.toString();
+            // Roughly size the StringBuilder to avoid reallocation: base literal length + components
+            int estimated = 12 + name.length() + group.length() + tagsStr.length();
+            StringBuilder sb = new StringBuilder(estimated);
+            sb.append("name=").append(name).append(", group=").append(group).append(", tags=").append(tagsStr);
+            s = sb.toString();
+            cachedToString = s;
+        }
+        return s;
     }
 }
