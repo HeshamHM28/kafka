@@ -33,6 +33,7 @@ public class MetricNameTemplate {
     private final String group;
     private final String description;
     private final LinkedHashSet<String> tags;
+    private final int cachedHash;
 
     /**
      * Create a new template. Note that the order of the tags will be preserved if the supplied
@@ -47,7 +48,13 @@ public class MetricNameTemplate {
         this.name = Objects.requireNonNull(name);
         this.group = Objects.requireNonNull(group);
         this.description = Objects.requireNonNull(description);
-        this.tags = new LinkedHashSet<>(Objects.requireNonNull(tagsNames));
+        Objects.requireNonNull(tagsNames);
+        // Pre-size LinkedHashSet to avoid rehashing: capacity = size / loadFactor + 1
+        // Default load factor is 0.75, so capacity should be size * 4/3 + 1
+        int capacity = (int) (tagsNames.size() / 0.75f) + 1;
+        this.tags = new LinkedHashSet<>(capacity);
+        this.tags.addAll(tagsNames);
+        this.cachedHash = computeHash(name, group, this.tags);
     }
 
     /**
@@ -59,7 +66,16 @@ public class MetricNameTemplate {
      * @param tagsNames the names of the metric tags in the preferred order; none of the tag names should be null
      */
     public MetricNameTemplate(String name, String group, String description, String... tagsNames) {
-        this(name, group, description, getTags(tagsNames));
+        this.name = Objects.requireNonNull(name);
+        this.group = Objects.requireNonNull(group);
+        this.description = Objects.requireNonNull(description);
+        // Pre-size LinkedHashSet and populate directly from array
+        int capacity = (int) (tagsNames.length / 0.75f) + 1;
+        this.tags = new LinkedHashSet<>(capacity);
+        for (String tagName : tagsNames) {
+            this.tags.add(tagName);
+        }
+        this.cachedHash = computeHash(name, group, this.tags);
     }
 
     private static LinkedHashSet<String> getTags(String... keys) {
@@ -106,9 +122,17 @@ public class MetricNameTemplate {
         return tags;
     }
 
+    private static int computeHash(Object a, Object b, Object c) {
+        int result = 1;
+        result = 31 * result + (a == null ? 0 : a.hashCode());
+        result = 31 * result + (b == null ? 0 : b.hashCode());
+        result = 31 * result + (c == null ? 0 : c.hashCode());
+        return result;
+    }
+
     @Override
     public int hashCode() {
-        return Objects.hash(name, group, tags);
+        return cachedHash;
     }
 
     @Override
