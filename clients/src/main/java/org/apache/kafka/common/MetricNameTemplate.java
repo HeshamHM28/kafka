@@ -47,7 +47,12 @@ public class MetricNameTemplate {
         this.name = Objects.requireNonNull(name);
         this.group = Objects.requireNonNull(group);
         this.description = Objects.requireNonNull(description);
-        this.tags = new LinkedHashSet<>(Objects.requireNonNull(tagsNames));
+        Objects.requireNonNull(tagsNames);
+        // Pre-size LinkedHashSet to avoid rehashing: capacity = size / loadFactor + 1
+        // Default load factor is 0.75, so capacity should be size * 4/3 + 1
+        int capacity = (int) (tagsNames.size() / 0.75f) + 1;
+        this.tags = new LinkedHashSet<>(capacity);
+        this.tags.addAll(tagsNames);
     }
 
     /**
@@ -59,7 +64,15 @@ public class MetricNameTemplate {
      * @param tagsNames the names of the metric tags in the preferred order; none of the tag names should be null
      */
     public MetricNameTemplate(String name, String group, String description, String... tagsNames) {
-        this(name, group, description, getTags(tagsNames));
+        this.name = Objects.requireNonNull(name);
+        this.group = Objects.requireNonNull(group);
+        this.description = Objects.requireNonNull(description);
+        // Pre-size LinkedHashSet and populate directly from array
+        int capacity = (int) (tagsNames.length / 0.75f) + 1;
+        this.tags = new LinkedHashSet<>(capacity);
+        for (String tagName : tagsNames) {
+            this.tags.add(tagName);
+        }
     }
 
     private static LinkedHashSet<String> getTags(String... keys) {
@@ -118,8 +131,16 @@ public class MetricNameTemplate {
         if (o == null || getClass() != o.getClass())
             return false;
         MetricNameTemplate other = (MetricNameTemplate) o;
-        return Objects.equals(name, other.name) && Objects.equals(group, other.group) &&
-                Objects.equals(tags, other.tags);
+        // Compare cheap string fields first for fail-fast behavior
+        if (!Objects.equals(name, other.name))
+            return false;
+        if (!Objects.equals(group, other.group))
+            return false;
+        // Fast size check before expensive set comparison
+        if (tags.size() != other.tags.size())
+            return false;
+        // Only perform expensive set comparison if all other checks pass
+        return tags.equals(other.tags);
     }
 
     @Override
