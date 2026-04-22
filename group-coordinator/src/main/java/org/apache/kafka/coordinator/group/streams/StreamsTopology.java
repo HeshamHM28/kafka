@@ -25,11 +25,11 @@ import org.apache.kafka.coordinator.group.generated.StreamsGroupTopologyValue.To
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Contains the topology sent by a Streams client in the Streams heartbeat during initialization.
@@ -90,16 +90,17 @@ public record StreamsTopology(int topologyEpoch,
      * @return set of topics required by the topology
      */
     public Set<String> requiredTopics() {
-        return subtopologies.values().stream()
-            .flatMap(x ->
-                Stream.concat(
-                    Stream.concat(
-                        x.sourceTopics().stream(),
-                        x.repartitionSourceTopics().stream().map(TopicInfo::name)
-                    ),
-                    x.stateChangelogTopics().stream().map(TopicInfo::name)
-                )
-            ).collect(Collectors.toSet());
+        Set<String> result = new HashSet<>();
+        for (Subtopology subtopology : subtopologies.values()) {
+            result.addAll(subtopology.sourceTopics());
+            for (TopicInfo ti : subtopology.repartitionSourceTopics()) {
+                result.add(ti.name());
+            }
+            for (TopicInfo ti : subtopology.stateChangelogTopics()) {
+                result.add(ti.name());
+            }
+        }
+        return result;
     }
 
     /**
