@@ -70,6 +70,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -471,7 +474,7 @@ public class FetchCollectorTest {
         final SubscriptionState subscriptions = mock(SubscriptionState.class);
         when(subscriptions.hasValidPosition(topicPartition0)).thenReturn(true);
         when(subscriptions.positionOrNull(topicPartition0)).thenReturn(new SubscriptionState.FetchPosition(fetchOffset));
-        when(subscriptions.tryUpdatingHighWatermark(topicPartition0, highWatermark)).thenReturn(false);
+        when(subscriptions.tryUpdatingPartitionState(eq(topicPartition0), eq(highWatermark), anyLong(), anyLong(), anyInt(), anyBoolean(), any())).thenReturn(false);
         final FetchCollector<String, String> fetchCollector = createFetchCollector(subscriptions);
         final Records records = createRecords();
         FetchResponseData.PartitionData partitionData = new FetchResponseData.PartitionData()
@@ -502,8 +505,7 @@ public class FetchCollectorTest {
         final SubscriptionState subscriptions = mock(SubscriptionState.class);
         when(subscriptions.hasValidPosition(topicPartition0)).thenReturn(true);
         when(subscriptions.positionOrNull(topicPartition0)).thenReturn(new SubscriptionState.FetchPosition(fetchOffset));
-        when(subscriptions.tryUpdatingHighWatermark(topicPartition0, highWatermark)).thenReturn(true);
-        when(subscriptions.tryUpdatingLogStartOffset(topicPartition0, logStartOffset)).thenReturn(false);
+        when(subscriptions.tryUpdatingPartitionState(eq(topicPartition0), eq(highWatermark), eq(logStartOffset), anyLong(), anyInt(), anyBoolean(), any())).thenReturn(false);
         final FetchCollector<String, String> fetchCollector = createFetchCollector(subscriptions);
         final Records records = createRecords();
         FetchResponseData.PartitionData partitionData = new FetchResponseData.PartitionData()
@@ -536,9 +538,7 @@ public class FetchCollectorTest {
         final SubscriptionState subscriptions = mock(SubscriptionState.class);
         when(subscriptions.hasValidPosition(topicPartition0)).thenReturn(true);
         when(subscriptions.positionOrNull(topicPartition0)).thenReturn(new SubscriptionState.FetchPosition(fetchOffset));
-        when(subscriptions.tryUpdatingHighWatermark(topicPartition0, highWatermark)).thenReturn(true);
-        when(subscriptions.tryUpdatingLogStartOffset(topicPartition0, logStartOffset)).thenReturn(true);
-        when(subscriptions.tryUpdatingLastStableOffset(topicPartition0, lastStableOffset)).thenReturn(false);
+        when(subscriptions.tryUpdatingPartitionState(eq(topicPartition0), eq(highWatermark), eq(logStartOffset), eq(lastStableOffset), anyInt(), anyBoolean(), any())).thenReturn(false);
         final FetchCollector<String, String> fetchCollector = createFetchCollector(subscriptions);
         final Records records = createRecords();
         FetchResponseData.PartitionData partitionData = new FetchResponseData.PartitionData()
@@ -573,10 +573,7 @@ public class FetchCollectorTest {
         final SubscriptionState subscriptions = mock(SubscriptionState.class);
         when(subscriptions.hasValidPosition(topicPartition0)).thenReturn(true);
         when(subscriptions.positionOrNull(topicPartition0)).thenReturn(new SubscriptionState.FetchPosition(fetchOffset));
-        when(subscriptions.tryUpdatingHighWatermark(topicPartition0, highWatermark)).thenReturn(true);
-        when(subscriptions.tryUpdatingLogStartOffset(topicPartition0, logStartOffset)).thenReturn(true);
-        when(subscriptions.tryUpdatingLastStableOffset(topicPartition0, lastStableOffset)).thenReturn(true);
-        when(subscriptions.tryUpdatingPreferredReadReplica(eq(topicPartition0), eq(preferredReadReplicaId), any())).thenReturn(false);
+        when(subscriptions.tryUpdatingPartitionState(eq(topicPartition0), eq(highWatermark), eq(logStartOffset), eq(lastStableOffset), eq(preferredReadReplicaId), eq(true), any())).thenReturn(false);
         final FetchCollector<String, String> fetchCollector = createFetchCollector(subscriptions);
         final Records records = createRecords();
         FetchResponseData.PartitionData partitionData = new FetchResponseData.PartitionData()

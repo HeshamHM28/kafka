@@ -149,21 +149,11 @@ public class FetchCollector<K, V> {
     private Fetch<K, V> fetchRecords(final CompletedFetch nextInLineFetch, int maxRecords) {
         final TopicPartition tp = nextInLineFetch.partition;
 
-        if (!subscriptions.isAssigned(tp)) {
-            // this can happen when a rebalance happened before fetched records are returned to the consumer's poll call
-            log.debug("Not returning fetched records for partition {} since it is no longer assigned", tp);
-        } else if (!subscriptions.isFetchable(tp)) {
-            // this can happen when a partition is paused before fetched records are returned to the consumer's
-            // poll call or if the offset is being reset.
-            // It can also happen under the Consumer rebalance protocol, when the consumer changes its subscription.
-            // Until the consumer receives an updated assignment from the coordinator, it can hold assigned partitions
-            // that are not in the subscription anymore, so we make them not fetchable.
-            log.debug("Not returning fetched records for assigned partition {} since it is no longer fetchable", tp);
-        } else {
-            SubscriptionState.FetchPosition position = subscriptions.position(tp);
+        SubscriptionState.FetchPosition position = subscriptions.positionIfFetchable(tp);
 
-            if (position == null)
-                throw new IllegalStateException("Missing position for fetchable partition " + tp);
+        if (position == null) {
+            log.debug("Not returning fetched records for partition {} since it is no longer assigned or fetchable", tp);
+        } else {
 
             if (nextInLineFetch.nextFetchOffset() == position.offset) {
                 List<ConsumerRecord<K, V>> partRecords = nextInLineFetch.fetchRecords(fetchConfig,
@@ -278,38 +268,28 @@ public class FetchCollector<K, V> {
 
     private boolean updatePartitionState(final FetchResponseData.PartitionData partitionData,
                                          final TopicPartition tp) {
-        if (partitionData.highWatermark() >= 0) {
+        if (partitionData.highWatermark() >= 0)
             log.trace("Updating high watermark for partition {} to {}", tp, partitionData.highWatermark());
-            if (!subscriptions.tryUpdatingHighWatermark(tp, partitionData.highWatermark())) {
-                return false;
-            }
-        }
-
-        if (partitionData.logStartOffset() >= 0) {
+        if (partitionData.logStartOffset() >= 0)
             log.trace("Updating log start offset for partition {} to {}", tp, partitionData.logStartOffset());
-            if (!subscriptions.tryUpdatingLogStartOffset(tp, partitionData.logStartOffset())) {
-                return false;
-            }
-        }
-
-        if (partitionData.lastStableOffset() >= 0) {
+        if (partitionData.lastStableOffset() >= 0)
             log.trace("Updating last stable offset for partition {} to {}", tp, partitionData.lastStableOffset());
-            if (!subscriptions.tryUpdatingLastStableOffset(tp, partitionData.lastStableOffset())) {
-                return false;
-            }
-        }
 
-        if (FetchResponse.isPreferredReplica(partitionData)) {
-            return subscriptions.tryUpdatingPreferredReadReplica(
-                tp, partitionData.preferredReadReplica(), () -> {
-                    long expireTimeMs = time.milliseconds() + metadata.metadataExpireMs();
-                    log.debug("Updating preferred read replica for partition {} to {}, set to expire at {}",
-                        tp, partitionData.preferredReadReplica(), expireTimeMs);
-                    return expireTimeMs;
-                });
-        }
-
-        return true;
+        boolean hasPreferredReplica = FetchResponse.isPreferredReplica(partitionData);
+        return subscriptions.tryUpdatingPartitionState(
+            tp,
+            partitionData.highWatermark(),
+            partitionData.logStartOffset(),
+            partitionData.lastStableOffset(),
+            partitionData.preferredReadReplica(),
+            hasPreferredReplica,
+            hasPreferredReplica ? () -> {
+                long expireTimeMs = time.milliseconds() + metadata.metadataExpireMs();
+                log.debug("Updating preferred read replica for partition {} to {}, set to expire at {}",
+                    tp, partitionData.preferredReadReplica(), expireTimeMs);
+                return expireTimeMs;
+            } : null
+        );
     }
 
     private void handleInitializeErrors(final CompletedFetch completedFetch, final Errors error) {

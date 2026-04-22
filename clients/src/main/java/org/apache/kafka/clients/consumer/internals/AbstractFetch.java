@@ -54,7 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 
 import static org.apache.kafka.clients.consumer.internals.FetchUtils.requestMetadataUpdate;
 
@@ -335,24 +334,6 @@ public abstract class AbstractFetch implements Closeable {
     }
 
     /**
-     * Return the list of <em>fetchable</em> partitions, which are the list of partitions to which we are subscribed,
-     * but <em>excluding</em> any partitions for which we still have buffered data. The idea is that since the user
-     * has yet to process the data for the partition that has already been fetched, we should not go send for more data
-     * until the previously-fetched data has been processed.
-     *
-     * @param buffered The set of partitions we have in our buffer
-     * @return {@link List} of {@link TopicPartition topic partitions} for which we should fetch data
-     */
-    private List<TopicPartition> fetchablePartitions(Set<TopicPartition> buffered) {
-        // This is the test that returns true if the partition is *not* buffered
-        Predicate<TopicPartition> isNotBuffered = tp -> !buffered.contains(tp);
-
-        // Return all partitions that are in an otherwise fetchable state *and* for which we don't already have some
-        // messages sitting in our buffer.
-        return subscriptions.fetchablePartitions(isNotBuffered);
-    }
-
-    /**
      * Determine from which replica to read: the <i>preferred</i> or the <i>leader</i>. The preferred replica is used
      * iff:
      *
@@ -429,10 +410,12 @@ public abstract class AbstractFetch implements Closeable {
         // This is the set of partitions that have buffered data
         Set<TopicPartition> buffered = Collections.unmodifiableSet(fetchBuffer.bufferedPartitions());
 
-        // This is the list of partitions that are fetchable and have no buffered data
-        List<TopicPartition> unbuffered = fetchablePartitions(buffered);
+        // Fetch all fetchable partitions with their positions in a single synchronized call,
+        // avoiding per-partition monitor acquisition and map lookups.
+        Map<TopicPartition, SubscriptionState.FetchPosition> unbufferedPositions =
+            subscriptions.fetchablePositions(tp -> !buffered.contains(tp));
 
-        if (unbuffered.isEmpty()) {
+        if (unbufferedPositions.isEmpty()) {
             // If there are no partitions that don't already have data locally buffered, there's no need to issue
             // any fetch requests at the present time.
             return Collections.emptyMap();
@@ -440,8 +423,9 @@ public abstract class AbstractFetch implements Closeable {
 
         Set<Integer> bufferedNodes = bufferedNodes(buffered, currentTimeMs);
 
-        for (TopicPartition partition : unbuffered) {
-            SubscriptionState.FetchPosition position = positionForPartition(partition);
+        for (Map.Entry<TopicPartition, SubscriptionState.FetchPosition> entry : unbufferedPositions.entrySet()) {
+            TopicPartition partition = entry.getKey();
+            SubscriptionState.FetchPosition position = entry.getValue();
             Optional<Node> nodeOpt = maybeNodeForPosition(partition, position, currentTimeMs);
 
             if (nodeOpt.isEmpty())
