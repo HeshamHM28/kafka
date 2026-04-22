@@ -442,16 +442,23 @@ public class ImplicitLinkedHashCollection<E extends ImplicitLinkedHashCollection
     private void changeCapacity(int newCapacity) {
         Element[] newElements = new Element[newCapacity];
         HeadElement newHead = new HeadElement();
-        int oldSize = size;
-        for (Iterator<E> iter = iterator(); iter.hasNext(); ) {
-            Element element = iter.next();
-            iter.remove();
-            int newSlot = addInternal(element, newElements);
+        // Walk the linked list in insertion order and rehash each element
+        // into the new array. We do NOT use iterator.remove() here because
+        // removing from the old table triggers O(n) reseating per removal.
+        // Instead we simply traverse the old linked list and insert into the
+        // new one -- the old array is discarded wholesale.
+        Element cur = indexToElement(head, elements, head.next());
+        while (cur != head) {
+            Element next = indexToElement(head, elements, cur.next());
+            // Reset link pointers so addInternal / addToListTail work correctly
+            cur.setPrev(INVALID_INDEX);
+            cur.setNext(INVALID_INDEX);
+            int newSlot = addInternal(cur, newElements);
             addToListTail(newHead, newElements, newSlot);
+            cur = next;
         }
         this.elements = newElements;
         this.head = newHead;
-        this.size = oldSize;
     }
 
     /**
@@ -681,16 +688,44 @@ public class ImplicitLinkedHashCollection<E extends ImplicitLinkedHashCollection
     }
 
     public void sort(Comparator<E> comparator) {
+        if (size <= 1) {
+            return;
+        }
+        // Collect elements in current insertion order.
         ArrayList<E> array = new ArrayList<>(size);
-        Iterator<E> iterator = iterator();
-        while (iterator.hasNext()) {
-            E e = iterator.next();
-            iterator.remove();
+        Element cur = indexToElement(head, elements, head.next());
+        while (cur != head) {
+            @SuppressWarnings("unchecked")
+            E e = (E) cur;
             array.add(e);
+            cur = indexToElement(head, elements, cur.next());
         }
+        // Sort the snapshot -- hash table slots are unaffected.
         array.sort(comparator);
+        // Rebuild only the linked-list pointers in the new sorted order.
+        // This avoids the O(n) reseating cost per remove and per re-add
+        // that the previous implementation incurred.
+        head.setNext(HEAD_INDEX);
+        head.setPrev(HEAD_INDEX);
         for (E e : array) {
-            add(e);
+            int slot = findSlotOf(e);
+            addToListTail(head, elements, slot);
         }
+    }
+
+    /**
+     * Find the slot index of an element that is already present in the hash table.
+     * Unlike {@link #findIndexOfEqualElement}, this searches by reference identity,
+     * which is safe here because we know the exact object instance.
+     */
+    private int findSlotOf(Element element) {
+        int slot = slot(elements, element);
+        for (int seen = 0; seen < elements.length; seen++) {
+            if (elements[slot] == element) {
+                return slot;
+            }
+            slot = (slot + 1) % elements.length;
+        }
+        throw new IllegalStateException("Element not found in hash table");
     }
 }
