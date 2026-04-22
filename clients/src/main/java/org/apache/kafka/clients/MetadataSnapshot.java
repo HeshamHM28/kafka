@@ -26,6 +26,7 @@ import org.apache.kafka.common.requests.MetadataResponse;
 import org.apache.kafka.common.requests.MetadataResponse.PartitionMetadata;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -37,7 +38,6 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
  * An internal immutable snapshot of nodes, topics, and partitions in the Kafka cluster. This keeps an up-to-date Cluster
@@ -84,9 +84,11 @@ public class MetadataSnapshot {
         this.internalTopics = Collections.unmodifiableSet(internalTopics);
         this.controller = controller;
         this.topicIds = Collections.unmodifiableMap(topicIds);
-        this.topicNames = Collections.unmodifiableMap(
-            topicIds.entrySet().stream().collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey))
-        );
+        Map<Uuid, String> tmpTopicNames = new HashMap<>(topicIds.size());
+        for (Map.Entry<String, Uuid> entry : topicIds.entrySet()) {
+            tmpTopicNames.put(entry.getValue(), entry.getKey());
+        }
+        this.topicNames = Collections.unmodifiableMap(tmpTopicNames);
 
         Map<TopicPartition, PartitionMetadata> tmpMetadataByPartition = new HashMap<>(partitions.size());
         for (PartitionMetadata p : partitions) {
@@ -176,9 +178,12 @@ public class MetadataSnapshot {
         // We want the most recent topic ID. We start with the previous ID stored for retained topics and then
         // update with newest information from the MetadataResponse. We always take the latest state, removing existing
         // topic IDs if the latest state contains the topic name but not a topic ID.
-        Map<String, Uuid> newTopicIds = this.topicIds.entrySet().stream()
-                .filter(entry -> shouldRetainTopic.test(entry.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, Uuid> newTopicIds = new HashMap<>(this.topicIds.size());
+        for (Map.Entry<String, Uuid> entry : this.topicIds.entrySet()) {
+            if (shouldRetainTopic.test(entry.getKey())) {
+                newTopicIds.put(entry.getKey(), entry.getValue());
+            }
+        }
 
         for (PartitionMetadata partition : addPartitions) {
             newMetadataByPartition.put(partition.topicPartition, partition);
@@ -223,12 +228,13 @@ public class MetadataSnapshot {
     }
 
     private void computeClusterView() {
-        List<PartitionInfo> partitionInfos = metadataByPartition.values()
-                .stream()
-                .map(metadata -> MetadataResponse.toPartitionInfo(metadata, nodes))
-                .collect(Collectors.toList());
+        Collection<PartitionMetadata> partitionMetadataValues = metadataByPartition.values();
+        List<PartitionInfo> partitionInfos = new ArrayList<>(partitionMetadataValues.size());
+        for (PartitionMetadata metadata : partitionMetadataValues) {
+            partitionInfos.add(MetadataResponse.toPartitionInfo(metadata, nodes));
+        }
         this.clusterInstance = new Cluster(clusterId, nodes.values(), partitionInfos, unauthorizedTopics,
-                invalidTopics, internalTopics, controller, topicIds);
+                invalidTopics, internalTopics, controller, topicIds, topicNames);
     }
 
     static MetadataSnapshot bootstrap(List<InetSocketAddress> addresses) {

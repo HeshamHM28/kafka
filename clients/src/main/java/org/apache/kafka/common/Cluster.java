@@ -59,7 +59,7 @@ public final class Cluster {
                    Collection<PartitionInfo> partitions,
                    Set<String> unauthorizedTopics,
                    Set<String> internalTopics) {
-        this(clusterId, false, nodes, partitions, unauthorizedTopics, Collections.emptySet(), internalTopics, null, Collections.emptyMap());
+        this(clusterId, false, nodes, partitions, unauthorizedTopics, Collections.emptySet(), internalTopics, null, Collections.emptyMap(), null);
     }
 
     /**
@@ -73,7 +73,7 @@ public final class Cluster {
                    Set<String> unauthorizedTopics,
                    Set<String> internalTopics,
                    Node controller) {
-        this(clusterId, false, nodes, partitions, unauthorizedTopics, Collections.emptySet(), internalTopics, controller, Collections.emptyMap());
+        this(clusterId, false, nodes, partitions, unauthorizedTopics, Collections.emptySet(), internalTopics, controller, Collections.emptyMap(), null);
     }
 
     /**
@@ -88,7 +88,7 @@ public final class Cluster {
                    Set<String> invalidTopics,
                    Set<String> internalTopics,
                    Node controller) {
-        this(clusterId, false, nodes, partitions, unauthorizedTopics, invalidTopics, internalTopics, controller, Collections.emptyMap());
+        this(clusterId, false, nodes, partitions, unauthorizedTopics, invalidTopics, internalTopics, controller, Collections.emptyMap(), null);
     }
 
     /**
@@ -104,7 +104,19 @@ public final class Cluster {
                    Set<String> internalTopics,
                    Node controller,
                    Map<String, Uuid> topicIds) {
-        this(clusterId, false, nodes, partitions, unauthorizedTopics, invalidTopics, internalTopics, controller, topicIds);
+        this(clusterId, false, nodes, partitions, unauthorizedTopics, invalidTopics, internalTopics, controller, topicIds, null);
+    }
+
+    public Cluster(String clusterId,
+                   Collection<Node> nodes,
+                   Collection<PartitionInfo> partitions,
+                   Set<String> unauthorizedTopics,
+                   Set<String> invalidTopics,
+                   Set<String> internalTopics,
+                   Node controller,
+                   Map<String, Uuid> topicIds,
+                   Map<Uuid, String> topicNames) {
+        this(clusterId, false, nodes, partitions, unauthorizedTopics, invalidTopics, internalTopics, controller, topicIds, topicNames);
     }
 
     private Cluster(String clusterId,
@@ -115,7 +127,8 @@ public final class Cluster {
                     Set<String> invalidTopics,
                     Set<String> internalTopics,
                     Node controller,
-                    Map<String, Uuid> topicIds) {
+                    Map<String, Uuid> topicIds,
+                    Map<Uuid, String> topicNames) {
         this.isBootstrapConfigured = isBootstrapConfigured;
         this.clusterResource = new ClusterResource(clusterId);
         // make a randomized, unmodifiable copy of the nodes
@@ -139,13 +152,19 @@ public final class Cluster {
         // to avoid unnecessary work
         Map<TopicPartition, PartitionInfo> tmpPartitionsByTopicPartition = new HashMap<>(partitions.size());
         Map<String, List<PartitionInfo>> tmpPartitionsByTopic = new HashMap<>();
+        // Track per-topic count of unavailable partitions (null leader) during the main loop
+        // so we can build the available-partitions index in a single pass instead of using
+        // stream().anyMatch() followed by a second iteration.
+        Map<String, Integer> unavailableCountByTopic = new HashMap<>();
         for (PartitionInfo p : partitions) {
             tmpPartitionsByTopicPartition.put(new TopicPartition(p.topic(), p.partition()), p);
             tmpPartitionsByTopic.computeIfAbsent(p.topic(), topic -> new ArrayList<>()).add(p);
 
             // The leader may not be known
-            if (p.leader() == null || p.leader().isEmpty())
+            if (p.leader() == null || p.leader().isEmpty()) {
+                unavailableCountByTopic.merge(p.topic(), 1, Integer::sum);
                 continue;
+            }
 
             // If it is known, its node information should be available
             List<PartitionInfo> partitionsForNode = Objects.requireNonNull(tmpPartitionsByNode.get(p.leader().id()));
@@ -158,18 +177,19 @@ public final class Cluster {
         }
 
         // Populate `tmpAvailablePartitionsByTopic` and update the values of `tmpPartitionsByTopic` to contain
-        // unmodifiable lists
+        // unmodifiable lists. Use the unavailable counts collected above to avoid a second pass per topic.
         Map<String, List<PartitionInfo>> tmpAvailablePartitionsByTopic = new HashMap<>(tmpPartitionsByTopic.size());
         for (Map.Entry<String, List<PartitionInfo>> entry : tmpPartitionsByTopic.entrySet()) {
             String topic = entry.getKey();
             List<PartitionInfo> partitionsForTopic = Collections.unmodifiableList(entry.getValue());
             tmpPartitionsByTopic.put(topic, partitionsForTopic);
             // Optimise for the common case where all partitions are available
-            boolean foundUnavailablePartition = partitionsForTopic.stream().anyMatch(p -> p.leader() == null);
+            int unavailableCount = unavailableCountByTopic.getOrDefault(topic, 0);
             List<PartitionInfo> availablePartitionsForTopic;
-            if (foundUnavailablePartition) {
-                availablePartitionsForTopic = new ArrayList<>(partitionsForTopic.size());
-                for (PartitionInfo p : partitionsForTopic) {
+            if (unavailableCount > 0) {
+                availablePartitionsForTopic = new ArrayList<>(partitionsForTopic.size() - unavailableCount);
+                for (int i = 0, size = partitionsForTopic.size(); i < size; i++) {
+                    PartitionInfo p = partitionsForTopic.get(i);
                     if (p.leader() != null)
                         availablePartitionsForTopic.add(p);
                 }
@@ -185,9 +205,13 @@ public final class Cluster {
         this.availablePartitionsByTopic = Collections.unmodifiableMap(tmpAvailablePartitionsByTopic);
         this.partitionsByNode = Collections.unmodifiableMap(tmpPartitionsByNode);
         this.topicIds = Collections.unmodifiableMap(topicIds);
-        Map<Uuid, String> tmpTopicNames = new HashMap<>();
-        topicIds.forEach((key, value) -> tmpTopicNames.put(value, key));
-        this.topicNames = Collections.unmodifiableMap(tmpTopicNames);
+        if (topicNames != null) {
+            this.topicNames = Collections.unmodifiableMap(topicNames);
+        } else {
+            Map<Uuid, String> tmpTopicNames = new HashMap<>();
+            topicIds.forEach((key, value) -> tmpTopicNames.put(value, key));
+            this.topicNames = Collections.unmodifiableMap(tmpTopicNames);
+        }
 
         this.unauthorizedTopics = Collections.unmodifiableSet(unauthorizedTopics);
         this.invalidTopics = Collections.unmodifiableSet(invalidTopics);
@@ -214,7 +238,7 @@ public final class Cluster {
         for (InetSocketAddress address : addresses)
             nodes.add(new Node(nodeId--, address.getHostString(), address.getPort()));
         return new Cluster(null, true, nodes, new ArrayList<>(0),
-            Collections.emptySet(), Collections.emptySet(), Collections.emptySet(), null, Collections.emptyMap());
+            Collections.emptySet(), Collections.emptySet(), Collections.emptySet(), null, Collections.emptyMap(), null);
     }
 
     /**
