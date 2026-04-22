@@ -35,10 +35,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class ListConsumerGroupOffsetsHandler implements AdminApiHandler<CoordinatorKey, Map<TopicPartition, OffsetAndMetadata>> {
 
@@ -81,9 +81,11 @@ public class ListConsumerGroupOffsetsHandler implements AdminApiHandler<Coordina
     }
 
     private static Set<CoordinatorKey> coordinatorKeys(Collection<String> groupIds) {
-        return groupIds.stream()
-           .map(CoordinatorKey::byGroupId)
-           .collect(Collectors.toSet());
+        Set<CoordinatorKey> keys = new HashSet<>(groupIds.size() * 2);
+        for (String groupId : groupIds) {
+            keys.add(CoordinatorKey.byGroupId(groupId));
+        }
+        return keys;
     }
 
     public OffsetFetchRequest.Builder buildBatchedRequest(Set<CoordinatorKey> groupIds) {
@@ -91,28 +93,33 @@ public class ListConsumerGroupOffsetsHandler implements AdminApiHandler<Coordina
         return OffsetFetchRequest.Builder.forTopicNames(
             new OffsetFetchRequestData()
                 .setRequireStable(requireStable)
-                .setGroups(groupIds.stream().map(groupId -> {
-                    ListConsumerGroupOffsetsSpec spec = groupSpecs.get(groupId.idValue);
-
-                    List<OffsetFetchRequestData.OffsetFetchRequestTopics> topics = null;
-                    if (spec.topicPartitions() != null) {
-                        topics = spec.topicPartitions().stream()
-                            .collect(Collectors.groupingBy(TopicPartition::topic))
-                            .entrySet()
-                            .stream()
-                            .map(entry -> new OffsetFetchRequestData.OffsetFetchRequestTopics()
-                                .setName(entry.getKey())
-                                .setPartitionIndexes(entry.getValue().stream()
-                                    .map(TopicPartition::partition)
-                                    .collect(Collectors.toList())))
-                            .collect(Collectors.toList());
-                    }
-                    return new OffsetFetchRequestData.OffsetFetchRequestGroup()
-                        .setGroupId(groupId.idValue)
-                        .setTopics(topics);
-                }).collect(Collectors.toList())),
+                .setGroups(buildGroupList(groupIds)),
             false
         );
+    }
+
+    private List<OffsetFetchRequestData.OffsetFetchRequestGroup> buildGroupList(Set<CoordinatorKey> groupIds) {
+        List<OffsetFetchRequestData.OffsetFetchRequestGroup> groups = new ArrayList<>(groupIds.size());
+        for (CoordinatorKey groupId : groupIds) {
+            ListConsumerGroupOffsetsSpec spec = groupSpecs.get(groupId.idValue);
+            List<OffsetFetchRequestData.OffsetFetchRequestTopics> topics = null;
+            if (spec.topicPartitions() != null) {
+                Map<String, List<Integer>> byTopic = new HashMap<>();
+                for (TopicPartition tp : spec.topicPartitions()) {
+                    byTopic.computeIfAbsent(tp.topic(), k -> new ArrayList<>()).add(tp.partition());
+                }
+                topics = new ArrayList<>(byTopic.size());
+                for (Map.Entry<String, List<Integer>> entry : byTopic.entrySet()) {
+                    topics.add(new OffsetFetchRequestData.OffsetFetchRequestTopics()
+                        .setName(entry.getKey())
+                        .setPartitionIndexes(entry.getValue()));
+                }
+            }
+            groups.add(new OffsetFetchRequestData.OffsetFetchRequestGroup()
+                .setGroupId(groupId.idValue)
+                .setTopics(topics));
+        }
+        return groups;
     }
 
     @Override
@@ -124,10 +131,12 @@ public class ListConsumerGroupOffsetsHandler implements AdminApiHandler<Coordina
         if (lookupStrategy.batch()) {
             return Collections.singletonList(new RequestAndKeys<>(buildBatchedRequest(groupIds), groupIds));
         } else {
-            return groupIds.stream().map(groupId -> {
+            List<RequestAndKeys<CoordinatorKey>> requests = new ArrayList<>(groupIds.size());
+            for (CoordinatorKey groupId : groupIds) {
                 Set<CoordinatorKey> keys = Collections.singleton(groupId);
-                return new RequestAndKeys<>(buildBatchedRequest(keys), keys);
-            }).collect(Collectors.toList());
+                requests.add(new RequestAndKeys<>(buildBatchedRequest(keys), keys));
+            }
+            return requests;
         }
     }
 

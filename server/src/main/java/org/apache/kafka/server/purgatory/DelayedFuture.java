@@ -51,14 +51,14 @@ public class DelayedFuture<T> extends DelayedOperation {
     public boolean tryComplete() {
         log.trace("Trying to complete operation for {} futures", futures.size());
 
-        long pending = futures.stream().filter(future -> !future.isDone()).count();
-        if (pending == 0) {
-            log.trace("All futures have been completed or have errors, completing the delayed operation");
-            return forceComplete();
-        } else {
-            log.trace("{} future still pending, not completing the delayed operation", pending);
-            return false;
+        for (CompletableFuture<T> future : futures) {
+            if (!future.isDone()) {
+                log.trace("At least one future still pending, not completing the delayed operation");
+                return false;
+            }
         }
+        log.trace("All futures have been completed or have errors, completing the delayed operation");
+        return forceComplete();
     }
 
     /**
@@ -67,9 +67,14 @@ public class DelayedFuture<T> extends DelayedOperation {
      */
     @Override
     public void onComplete() {
-        List<CompletableFuture<T>> pendingFutures = futures.stream().filter(future -> !future.isDone()).toList();
-        log.trace("Completing operation for {} futures, expired {}", futures.size(), pendingFutures.size());
-        pendingFutures.forEach(future -> future.completeExceptionally(new TimeoutException("Request has been timed out after " + timeoutMs + " ms")));
+        int pendingCount = 0;
+        for (CompletableFuture<T> future : futures) {
+            if (!future.isDone()) {
+                pendingCount++;
+                future.completeExceptionally(new TimeoutException("Request has been timed out after " + timeoutMs + " ms"));
+            }
+        }
+        log.trace("Completing operation for {} futures, expired {}", futures.size(), pendingCount);
         responseCallback.run();
     }
 

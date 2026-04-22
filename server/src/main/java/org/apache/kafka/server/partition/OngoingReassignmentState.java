@@ -33,7 +33,13 @@ public record OngoingReassignmentState(
     @Override
     public int replicationFactor() {
         // Keep the size of the original replicas. Replicas may also include those currently being added.
-        return (int) replicas.stream().filter(r -> !addingReplicas.contains(r)).count();
+        int count = 0;
+        for (int r : replicas) {
+            if (!addingReplicas.contains(r)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     @Override
