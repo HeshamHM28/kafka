@@ -156,7 +156,7 @@ public class Sender implements Runnable {
     }
 
     public List<ProducerBatch> inFlightBatches(TopicPartition tp) {
-        return inFlightBatches.containsKey(tp) ? inFlightBatches.get(tp) : new ArrayList<>();
+        return inFlightBatches.getOrDefault(tp, Collections.emptyList());
     }
 
     private void maybeRemoveFromInflightBatches(ProducerBatch batch) {
@@ -623,9 +623,8 @@ public class Sender implements Runnable {
                     // We need to find batch based on topic id and partition index only as
                     // topic name in the response will be empty.
                     // For older versions, topic id is zero, and we will find the batch based on the topic name.
-                    TopicPartition tp = (!r.topicId().equals(Uuid.ZERO_UUID) && topicNames.containsKey(r.topicId())) ?
-                            new TopicPartition(topicNames.get(r.topicId()), p.index()) :
-                            new TopicPartition(r.name(), p.index());
+                    String topicName = r.topicId().equals(Uuid.ZERO_UUID) ? null : topicNames.get(r.topicId());
+                    TopicPartition tp = new TopicPartition(topicName != null ? topicName : r.name(), p.index());
 
                     ProducerBatch batch = batches.get(tp);
                     if (batch == null) {
@@ -898,13 +897,13 @@ public class Sender implements Runnable {
             return;
 
         final Map<TopicPartition, ProducerBatch> recordsByPartition = new HashMap<>(batches.size());
-        Map<String, Uuid> topicIds = topicIdsForBatches(batches);
+        Map<String, Uuid> metadataTopicIds = metadata.topicIds();
 
         ProduceRequestData.TopicProduceDataCollection tpd = new ProduceRequestData.TopicProduceDataCollection();
         for (ProducerBatch batch : batches) {
             TopicPartition tp = batch.topicPartition;
             MemoryRecords records = batch.records();
-            Uuid topicId = topicIds.get(tp.topic());
+            Uuid topicId = metadataTopicIds.getOrDefault(tp.topic(), Uuid.ZERO_UUID);
             ProduceRequestData.TopicProduceData tpData = tpd.find(tp.topic(), topicId);
 
             if (tpData == null) {
@@ -948,14 +947,8 @@ public class Sender implements Runnable {
         log.trace("Sent produce request to {}: {}", nodeId, requestBuilder);
     }
 
-    private Map<String, Uuid> topicIdsForBatches(List<ProducerBatch> batches) {
-        return batches.stream()
-                .collect(Collectors.toMap(
-                        b -> b.topicPartition.topic(),
-                        b -> metadata.topicIds().getOrDefault(b.topicPartition.topic(), Uuid.ZERO_UUID),
-                        (existing, replacement) -> replacement)
-                );
-    }
+
+
 
     /**
      * Wake up the selector associated with this send thread
