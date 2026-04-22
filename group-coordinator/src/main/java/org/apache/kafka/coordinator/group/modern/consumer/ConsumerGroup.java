@@ -608,9 +608,15 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         Map<String, Integer> counts = new HashMap<>(this.serverAssignors);
         maybeUpdateServerAssignors(counts, oldMember, newMember);
 
-        return counts.entrySet().stream()
-            .max(Map.Entry.comparingByValue())
-            .map(Map.Entry::getKey);
+        String bestAssignor = null;
+        int bestCount = Integer.MIN_VALUE;
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() > bestCount) {
+                bestCount = entry.getValue();
+                bestAssignor = entry.getKey();
+            }
+        }
+        return Optional.ofNullable(bestAssignor);
     }
 
     /**

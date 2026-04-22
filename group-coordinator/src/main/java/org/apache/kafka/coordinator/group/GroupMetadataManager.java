@@ -2896,7 +2896,8 @@ public class GroupMetadataManager {
         // topics whose timestamp indicates that they are older than delta elapsed.
         subscriptionTopicNames.forEach(topicName -> {
             metadataImage.topicMetadata(topicName).ifPresent(topicMetadata -> {
-                Set<Integer> alreadyInitializedPartSet = alreadyInitialized.containsKey(topicMetadata.id()) ? alreadyInitialized.get(topicMetadata.id()).partitions() : Set.of();
+                InitMapValue alreadyInitializedValue = alreadyInitialized.get(topicMetadata.id());
+                Set<Integer> alreadyInitializedPartSet = alreadyInitializedValue != null ? alreadyInitializedValue.partitions() : Set.of();
                 if (alreadyInitializedPartSet.isEmpty() || alreadyInitializedPartSet.size() < topicMetadata.partitionCount()) {
                     // alreadyInitialized contains all initialized topics and initializing topics which are less than delta old
                     // which means we are putting subscribed topics which are unseen or initializing for more than delta. But, we
@@ -3016,15 +3017,17 @@ public class GroupMetadataManager {
         combinedTopicIdSet.addAll(initializingSet);
 
         for (Uuid topicId : combinedTopicIdSet) {
-            Set<Integer> initializedPartitions = initialized.containsKey(topicId) ? initialized.get(topicId).partitions() : new HashSet<>();
-            long timestamp = initialized.containsKey(topicId) ? initialized.get(topicId).timestamp() : -1;
-            String name = initialized.containsKey(topicId) ? initialized.get(topicId).name() : "UNKNOWN";
+            InitMapValue initValue = initialized.get(topicId);
+            Set<Integer> initializedPartitions = initValue != null ? initValue.partitions() : new HashSet<>();
+            long timestamp = initValue != null ? initValue.timestamp() : -1;
+            String name = initValue != null ? initValue.name() : "UNKNOWN";
 
             Set<Integer> finalPartitions = new HashSet<>(initializedPartitions);
-            if (initializingSet.contains(topicId)) {
-                finalPartitions.addAll(initializing.get(topicId).partitions());
-                timestamp = initializing.get(topicId).timestamp();
-                name = initializing.get(topicId).name();
+            InitMapValue initializingValue = initializing.get(topicId);
+            if (initializingValue != null) {
+                finalPartitions.addAll(initializingValue.partitions());
+                timestamp = initializingValue.timestamp();
+                name = initializingValue.name();
             }
             finalInitMap.putIfAbsent(topicId, new InitMapValue(name, finalPartitions, timestamp));
         }
