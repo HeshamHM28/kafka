@@ -46,8 +46,14 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Benchmarks the consumer fetch pipeline hot-path operations on SubscriptionState.
- * These methods are called per-partition on every fetch cycle and fetch response.
+ * Benchmarks the consumer fetch pipeline operations on SubscriptionState.
+ *
+ * The key optimization is fetchablePositions() which returns partition positions in a
+ * single synchronized pass, replacing the old pattern of fetchablePartitions() (which
+ * discarded state) followed by per-partition position() re-lookups.
+ *
+ * Also benchmarks per-partition isAssigned+position lookups which the batch methods
+ * in FetchCollector now consolidate into single synchronized calls.
  */
 @State(Scope.Benchmark)
 @Fork(value = 2)
@@ -86,42 +92,43 @@ public class FetchPipelineBenchmark {
     }
 
     /**
-     * Benchmarks the atomic positionIfFetchable() which combines isAssigned + isFetchable + position
-     * into a single synchronized lookup. Called per-partition in FetchCollector.fetchRecords().
+     * Simulates the pre-optimization prepareFetchRequests() pattern:
+     * fetchablePartitions() returns keys only, then position() is called per partition.
+     * Each call acquires the synchronized monitor and does a HashMap lookup.
      */
     @Benchmark
-    public int testPositionIfFetchable() {
+    public int testFetchablePartitionsThenPositionLookup() {
+        List<TopicPartition> fetchable = subscriptionState.fetchablePartitions(tp -> true);
         int found = 0;
-        for (TopicPartition tp : partitions) {
-            if (subscriptionState.positionIfFetchable(tp) != null) {
-                found++;
-            }
+        for (TopicPartition tp : fetchable) {
+            SubscriptionState.FetchPosition pos = subscriptionState.position(tp);
+            if (pos != null) found++;
         }
         return found;
     }
 
     /**
-     * Benchmarks the batch partition state update which combines highWatermark + logStartOffset +
-     * lastStableOffset + preferredReadReplica updates into a single synchronized call.
-     * Called per-partition in FetchCollector.updatePartitionState().
-     */
-    @Benchmark
-    public int testTryUpdatingPartitionState() {
-        int updated = 0;
-        for (TopicPartition tp : partitions) {
-            if (subscriptionState.tryUpdatingPartitionState(tp, 100L, 0L, 90L, -1, false, null)) {
-                updated++;
-            }
-        }
-        return updated;
-    }
-
-    /**
-     * Benchmarks fetchablePositions() which returns positions for all fetchable partitions
-     * in a single synchronized pass. Called once per fetch cycle in AbstractFetch.prepareFetchRequests().
+     * The optimized path: fetchablePositions() returns positions in a single synchronized
+     * pass, eliminating per-partition re-lookups.
      */
     @Benchmark
     public Map<TopicPartition, SubscriptionState.FetchPosition> testFetchablePositions() {
         return subscriptionState.fetchablePositions(tp -> true);
+    }
+
+    /**
+     * Simulates the pre-optimization fetchRecords() pattern per partition:
+     * isAssigned() + position() as separate synchronized calls.
+     */
+    @Benchmark
+    public int testPerPartitionAssignedAndPosition() {
+        int found = 0;
+        for (TopicPartition tp : partitions) {
+            if (subscriptionState.isAssigned(tp)) {
+                SubscriptionState.FetchPosition pos = subscriptionState.position(tp);
+                if (pos != null) found++;
+            }
+        }
+        return found;
     }
 }
