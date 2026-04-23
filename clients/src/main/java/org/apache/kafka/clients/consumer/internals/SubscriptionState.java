@@ -496,6 +496,18 @@ public class SubscriptionState {
         return result;
     }
 
+    public synchronized Map<TopicPartition, FetchPosition> fetchablePositions(Predicate<TopicPartition> isAvailable) {
+        Map<TopicPartition, FetchPosition> result = new HashMap<>();
+        boolean isShareSubscription = subscriptionType.equals(SubscriptionType.AUTO_TOPICS_SHARE);
+        assignment.forEach((topicPartition, topicPartitionState) -> {
+            if ((isShareSubscription || isFetchableAndSubscribed(topicPartition, topicPartitionState))
+                    && isAvailable.test(topicPartition)) {
+                result.put(topicPartition, topicPartitionState.position);
+            }
+        });
+        return result;
+    }
+
     /**
      * Check if the partition is fetchable.
      * If the consumer has explicitly subscribed to a list of topic names,
@@ -634,7 +646,7 @@ public class SubscriptionState {
         if (state == null) {
             return null;
         }
-        return assignedState(tp).position;
+        return state.position;
     }
 
     public synchronized Long partitionLag(TopicPartition tp, IsolationLevel isolationLevel) {
@@ -687,19 +699,19 @@ public class SubscriptionState {
         assignedState(tp).highWatermark(highWatermark);
     }
 
-    synchronized boolean tryUpdatingHighWatermark(TopicPartition tp, long highWatermark) {
+    public synchronized boolean tryUpdatingHighWatermark(TopicPartition tp, long highWatermark) {
         final TopicPartitionState state = assignedStateOrNull(tp);
         if (state != null) {
-            assignedState(tp).highWatermark(highWatermark);
+            state.highWatermark(highWatermark);
             return true;
         }
         return false;
     }
 
-    synchronized boolean tryUpdatingLogStartOffset(TopicPartition tp, long highWatermark) {
+    public synchronized boolean tryUpdatingLogStartOffset(TopicPartition tp, long highWatermark) {
         final TopicPartitionState state = assignedStateOrNull(tp);
         if (state != null) {
-            assignedState(tp).logStartOffset(highWatermark);
+            state.logStartOffset(highWatermark);
             return true;
         }
         return false;
@@ -709,10 +721,10 @@ public class SubscriptionState {
         assignedState(tp).lastStableOffset(lastStableOffset);
     }
 
-    synchronized boolean tryUpdatingLastStableOffset(TopicPartition tp, long lastStableOffset) {
+    public synchronized boolean tryUpdatingLastStableOffset(TopicPartition tp, long lastStableOffset) {
         final TopicPartitionState state = assignedStateOrNull(tp);
         if (state != null) {
-            assignedState(tp).lastStableOffset(lastStableOffset);
+            state.lastStableOffset(lastStableOffset);
             return true;
         }
         return false;
@@ -746,10 +758,36 @@ public class SubscriptionState {
                                                              LongSupplier timeMs) {
         final TopicPartitionState state = assignedStateOrNull(tp);
         if (state != null) {
-            assignedState(tp).updatePreferredReadReplica(preferredReadReplicaId, timeMs);
+            state.updatePreferredReadReplica(preferredReadReplicaId, timeMs);
             return true;
         }
         return false;
+    }
+
+    public synchronized boolean tryUpdatingPartitionState(TopicPartition tp,
+                                                   long highWatermark,
+                                                   long logStartOffset,
+                                                   long lastStableOffset,
+                                                   int preferredReadReplicaId,
+                                                   boolean hasPreferredReplica,
+                                                   LongSupplier preferredReplicaTimeMs) {
+        final TopicPartitionState state = assignedStateOrNull(tp);
+        if (state == null) {
+            return false;
+        }
+        if (highWatermark >= 0) {
+            state.highWatermark(highWatermark);
+        }
+        if (logStartOffset >= 0) {
+            state.logStartOffset(logStartOffset);
+        }
+        if (lastStableOffset >= 0) {
+            state.lastStableOffset(lastStableOffset);
+        }
+        if (hasPreferredReplica) {
+            state.updatePreferredReadReplica(preferredReadReplicaId, preferredReplicaTimeMs);
+        }
+        return true;
     }
 
     /**
@@ -924,6 +962,14 @@ public class SubscriptionState {
     synchronized boolean isFetchable(TopicPartition tp) {
         TopicPartitionState tps = assignedStateOrNull(tp);
         return tps != null && isFetchableAndSubscribed(tp, tps);
+    }
+
+    public synchronized FetchPosition positionIfFetchable(TopicPartition tp) {
+        TopicPartitionState tps = assignedStateOrNull(tp);
+        if (tps == null || !isFetchableAndSubscribed(tp, tps)) {
+            return null;
+        }
+        return tps.position;
     }
 
     public synchronized boolean hasValidPosition(TopicPartition tp) {

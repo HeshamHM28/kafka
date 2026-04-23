@@ -78,6 +78,9 @@ public class CompletedFetch {
     private boolean corruptLastRecord = false;
     private long nextFetchOffset;
     private Optional<Integer> lastEpoch;
+    // Cached per-batch values to avoid redundant computation per record.
+    // These only change when currentBatch changes (in nextFetchedRecord).
+    private TimestampType currentBatchTimestampType = TimestampType.NO_TIMESTAMP_TYPE;
     private boolean isConsumed = false;
     private boolean initialized = false;
 
@@ -198,6 +201,7 @@ public class CompletedFetch {
 
                 currentBatch = batches.next();
                 lastEpoch = maybeLeaderEpoch(currentBatch.partitionLeaderEpoch());
+                currentBatchTimestampType = currentBatch.timestampType();
                 maybeEnsureValid(fetchConfig, currentBatch);
 
                 if (fetchConfig.isolationLevel == IsolationLevel.READ_COMMITTED && currentBatch.hasProducerId()) {
@@ -276,9 +280,10 @@ public class CompletedFetch {
                 if (lastRecord == null)
                     break;
 
-                Optional<Integer> leaderEpoch = maybeLeaderEpoch(currentBatch.partitionLeaderEpoch());
-                TimestampType timestampType = currentBatch.timestampType();
-                ConsumerRecord<K, V> record = parseRecord(deserializers, partition, leaderEpoch, timestampType, lastRecord);
+                // Use cached per-batch values (lastEpoch and currentBatchTimestampType) instead
+                // of recomputing them per record. These are set in nextFetchedRecord() when a new
+                // batch is started, and remain constant for all records within the same batch.
+                ConsumerRecord<K, V> record = parseRecord(deserializers, partition, lastEpoch, currentBatchTimestampType, lastRecord);
                 records.add(record);
                 recordsRead++;
                 bytesRead += lastRecord.sizeInBytes();
