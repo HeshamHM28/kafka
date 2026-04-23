@@ -699,7 +699,7 @@ public class SubscriptionState {
         assignedState(tp).highWatermark(highWatermark);
     }
 
-    synchronized boolean tryUpdatingHighWatermark(TopicPartition tp, long highWatermark) {
+    public synchronized boolean tryUpdatingHighWatermark(TopicPartition tp, long highWatermark) {
         final TopicPartitionState state = assignedStateOrNull(tp);
         if (state != null) {
             state.highWatermark(highWatermark);
@@ -708,7 +708,7 @@ public class SubscriptionState {
         return false;
     }
 
-    synchronized boolean tryUpdatingLogStartOffset(TopicPartition tp, long highWatermark) {
+    public synchronized boolean tryUpdatingLogStartOffset(TopicPartition tp, long highWatermark) {
         final TopicPartitionState state = assignedStateOrNull(tp);
         if (state != null) {
             state.logStartOffset(highWatermark);
@@ -721,7 +721,7 @@ public class SubscriptionState {
         assignedState(tp).lastStableOffset(lastStableOffset);
     }
 
-    synchronized boolean tryUpdatingLastStableOffset(TopicPartition tp, long lastStableOffset) {
+    public synchronized boolean tryUpdatingLastStableOffset(TopicPartition tp, long lastStableOffset) {
         final TopicPartitionState state = assignedStateOrNull(tp);
         if (state != null) {
             state.lastStableOffset(lastStableOffset);
@@ -764,7 +764,7 @@ public class SubscriptionState {
         return false;
     }
 
-    synchronized boolean tryUpdatingPartitionState(TopicPartition tp,
+    public synchronized boolean tryUpdatingPartitionState(TopicPartition tp,
                                                    long highWatermark,
                                                    long logStartOffset,
                                                    long lastStableOffset,
@@ -964,7 +964,7 @@ public class SubscriptionState {
         return tps != null && isFetchableAndSubscribed(tp, tps);
     }
 
-    synchronized FetchPosition positionIfFetchable(TopicPartition tp) {
+    public synchronized FetchPosition positionIfFetchable(TopicPartition tp) {
         TopicPartitionState tps = assignedStateOrNull(tp);
         if (tps == null || !isFetchableAndSubscribed(tp, tps)) {
             return null;

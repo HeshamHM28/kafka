@@ -48,22 +48,21 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Benchmarks the consumer fetch pipeline operations on SubscriptionState,
- * both single-threaded and under multi-threaded contention.
+ * Benchmarks the consumer fetch pipeline optimizations with proper old-vs-new
+ * pairs for each optimization, both single-threaded and under contention.
  *
- * <h3>Single-threaded benchmarks</h3>
- * Measure raw overhead of old vs new lookup patterns without contention.
+ * <h3>Optimization 1: fetchablePartitions + position() → fetchablePositions()</h3>
+ * Old: fetchablePartitions() returns keys, then position() per partition (N+1 lock acquisitions).
+ * New: fetchablePositions() returns positions in one pass (1 lock acquisition).
  *
- * <h3>Multi-threaded contention benchmarks</h3>
- * Simulate the real consumer scenario: fetch threads read partition state
- * (fetchablePositions / fetchablePartitions+position) while other threads
- * concurrently write to the same synchronized monitor via position updates.
+ * <h3>Optimization 2: isAssigned + position → positionIfFetchable()</h3>
+ * Old: isAssigned(tp) + position(tp) as separate synchronized calls (2 locks per partition).
+ * New: positionIfFetchable(tp) combines both in a single synchronized call (1 lock per partition).
  *
- * <p>The key insight: the old read path acquires the monitor N+1 times
- * (1 for fetchablePartitions + N for position()), while the new path
- * acquires it once (fetchablePositions). Under contention, each monitor
- * acquisition is a point where a thread can be blocked by a writer,
- * so the old path suffers disproportionately.</p>
+ * <h3>Optimization 3: 3x tryUpdating* → tryUpdatingPartitionState()</h3>
+ * Old: tryUpdatingHighWatermark + tryUpdatingLogStartOffset + tryUpdatingLastStableOffset
+ *      as 3 separate synchronized calls (3 locks per partition).
+ * New: tryUpdatingPartitionState() batches all updates in one call (1 lock per partition).
  */
 @State(Scope.Group)
 @Fork(value = 2)
@@ -78,7 +77,6 @@ public class FetchPipelineBenchmark {
 
     private SubscriptionState subscriptionState;
     private List<TopicPartition> partitions;
-    private SubscriptionState.FetchPosition writePosition;
 
     @Setup(Level.Trial)
     public void setup() {
@@ -100,27 +98,19 @@ public class FetchPipelineBenchmark {
             subscriptionState.seekUnvalidated(tp, position);
             subscriptionState.completeValidation(tp);
         }
-        // Position used by writer threads to create contention on the synchronized monitor
-        writePosition = new SubscriptionState.FetchPosition(
-            1L,
-            Optional.of(1),
-            new Metadata.LeaderAndEpoch(Optional.of(new Node(0, "host", 9092)), Optional.of(10))
-        );
     }
 
-    // -----------------------------------------------------------------------
-    // Single-threaded benchmarks (no contention baseline)
-    // -----------------------------------------------------------------------
+    // =======================================================================
+    // OPTIMIZATION 1: fetchablePartitions + position() → fetchablePositions()
+    // =======================================================================
 
-    /**
-     * Old pattern: fetchablePartitions() returns keys only, then position()
-     * is called per partition. Each call acquires the synchronized monitor
-     * and does a HashMap lookup.
-     */
+    // --- Single-threaded ---
+
+    /** OLD: fetchablePartitions() then position() per partition. N+1 lock acquisitions. */
     @Benchmark
-    @Group("singleOldFetchable")
+    @Group("opt1_single_old")
     @GroupThreads(1)
-    public int testFetchablePartitionsThenPositionLookup() {
+    public int opt1_old_fetchablePartitionsThenPosition() {
         List<TopicPartition> fetchable = subscriptionState.fetchablePartitions(tp -> true);
         int found = 0;
         for (TopicPartition tp : fetchable) {
@@ -130,25 +120,61 @@ public class FetchPipelineBenchmark {
         return found;
     }
 
-    /**
-     * New pattern: fetchablePositions() returns positions in a single
-     * synchronized pass, eliminating per-partition re-lookups.
-     */
+    /** NEW: fetchablePositions() single pass. 1 lock acquisition. */
     @Benchmark
-    @Group("singleNewFetchable")
+    @Group("opt1_single_new")
     @GroupThreads(1)
-    public Map<TopicPartition, SubscriptionState.FetchPosition> testFetchablePositions() {
+    public Map<TopicPartition, SubscriptionState.FetchPosition> opt1_new_fetchablePositions() {
         return subscriptionState.fetchablePositions(tp -> true);
     }
 
-    /**
-     * Old pattern: per-partition isAssigned() + position() as separate
-     * synchronized calls.
-     */
+    // --- Contention: 2 readers + 1 writer ---
+
     @Benchmark
-    @Group("singleOldPerPartition")
+    @Group("opt1_contention_old")
+    @GroupThreads(2)
+    public int opt1_contention_old_read() {
+        List<TopicPartition> fetchable = subscriptionState.fetchablePartitions(tp -> true);
+        int found = 0;
+        for (TopicPartition tp : fetchable) {
+            SubscriptionState.FetchPosition pos = subscriptionState.position(tp);
+            if (pos != null) found++;
+        }
+        return found;
+    }
+
+    @Benchmark
+    @Group("opt1_contention_old")
     @GroupThreads(1)
-    public int testPerPartitionAssignedAndPosition() {
+    public int opt1_contention_old_write() {
+        return updateWriter();
+    }
+
+    @Benchmark
+    @Group("opt1_contention_new")
+    @GroupThreads(2)
+    public Map<TopicPartition, SubscriptionState.FetchPosition> opt1_contention_new_read() {
+        return subscriptionState.fetchablePositions(tp -> true);
+    }
+
+    @Benchmark
+    @Group("opt1_contention_new")
+    @GroupThreads(1)
+    public int opt1_contention_new_write() {
+        return updateWriter();
+    }
+
+    // =======================================================================
+    // OPTIMIZATION 2: isAssigned + position → positionIfFetchable()
+    // =======================================================================
+
+    // --- Single-threaded ---
+
+    /** OLD: isAssigned(tp) + position(tp) separately. 2 lock acquisitions per partition. */
+    @Benchmark
+    @Group("opt2_single_old")
+    @GroupThreads(1)
+    public int opt2_old_isAssignedThenPosition() {
         int found = 0;
         for (TopicPartition tp : partitions) {
             if (subscriptionState.isAssigned(tp)) {
@@ -159,121 +185,148 @@ public class FetchPipelineBenchmark {
         return found;
     }
 
-    // -----------------------------------------------------------------------
-    // Contention writer: updates positions to create realistic monitor
-    // contention. Used by both old and new contention groups.
-    // Each position(tp, pos) call acquires the synchronized monitor,
-    // simulating fetch response handlers updating partition state.
-    // -----------------------------------------------------------------------
+    /** NEW: positionIfFetchable(tp) single call. 1 lock acquisition per partition. */
+    @Benchmark
+    @Group("opt2_single_new")
+    @GroupThreads(1)
+    public int opt2_new_positionIfFetchable() {
+        int found = 0;
+        for (TopicPartition tp : partitions) {
+            SubscriptionState.FetchPosition pos = subscriptionState.positionIfFetchable(tp);
+            if (pos != null) found++;
+        }
+        return found;
+    }
 
-    private int writerWorkload() {
+    // --- Contention: 2 readers + 1 writer ---
+
+    @Benchmark
+    @Group("opt2_contention_old")
+    @GroupThreads(2)
+    public int opt2_contention_old_read() {
+        int found = 0;
+        for (TopicPartition tp : partitions) {
+            if (subscriptionState.isAssigned(tp)) {
+                SubscriptionState.FetchPosition pos = subscriptionState.position(tp);
+                if (pos != null) found++;
+            }
+        }
+        return found;
+    }
+
+    @Benchmark
+    @Group("opt2_contention_old")
+    @GroupThreads(1)
+    public int opt2_contention_old_write() {
+        return updateWriter();
+    }
+
+    @Benchmark
+    @Group("opt2_contention_new")
+    @GroupThreads(2)
+    public int opt2_contention_new_read() {
+        int found = 0;
+        for (TopicPartition tp : partitions) {
+            SubscriptionState.FetchPosition pos = subscriptionState.positionIfFetchable(tp);
+            if (pos != null) found++;
+        }
+        return found;
+    }
+
+    @Benchmark
+    @Group("opt2_contention_new")
+    @GroupThreads(1)
+    public int opt2_contention_new_write() {
+        return updateWriter();
+    }
+
+    // =======================================================================
+    // OPTIMIZATION 3: 3x tryUpdating* → tryUpdatingPartitionState()
+    // =======================================================================
+
+    // --- Single-threaded ---
+
+    /** OLD: 3 separate tryUpdating* calls. 3 lock acquisitions per partition. */
+    @Benchmark
+    @Group("opt3_single_old")
+    @GroupThreads(1)
+    public int opt3_old_separateUpdates() {
         int updated = 0;
         for (TopicPartition tp : partitions) {
-            subscriptionState.position(tp, writePosition);
-            updated++;
+            subscriptionState.tryUpdatingHighWatermark(tp, 1000L);
+            subscriptionState.tryUpdatingLogStartOffset(tp, 0L);
+            if (subscriptionState.tryUpdatingLastStableOffset(tp, 999L))
+                updated++;
         }
         return updated;
     }
 
-    // -----------------------------------------------------------------------
-    // Multi-threaded contention benchmarks — 2 readers + 1 writer
-    // -----------------------------------------------------------------------
-
-    /**
-     * Old read path under contention: fetchablePartitions + per-partition position().
-     * Acquires monitor N+1 times per operation — each acquisition is a contention point.
-     */
+    /** NEW: tryUpdatingPartitionState() batches all 3. 1 lock acquisition per partition. */
     @Benchmark
-    @Group("contentionOldFetchable")
-    @GroupThreads(2)
-    public int contention_oldFetchable_read() {
-        List<TopicPartition> fetchable = subscriptionState.fetchablePartitions(tp -> true);
-        int found = 0;
-        for (TopicPartition tp : fetchable) {
-            SubscriptionState.FetchPosition pos = subscriptionState.position(tp);
-            if (pos != null) found++;
-        }
-        return found;
-    }
-
-    /**
-     * Writer thread creating contention for old read path.
-     */
-    @Benchmark
-    @Group("contentionOldFetchable")
+    @Group("opt3_single_new")
     @GroupThreads(1)
-    public int contention_oldFetchable_write() {
-        return writerWorkload();
-    }
-
-    /**
-     * New read path under contention: single fetchablePositions() call.
-     * Acquires monitor once — minimal contention window.
-     */
-    @Benchmark
-    @Group("contentionNewFetchable")
-    @GroupThreads(2)
-    public Map<TopicPartition, SubscriptionState.FetchPosition> contention_newFetchable_read() {
-        return subscriptionState.fetchablePositions(tp -> true);
-    }
-
-    /**
-     * Writer thread creating contention for new read path.
-     */
-    @Benchmark
-    @Group("contentionNewFetchable")
-    @GroupThreads(1)
-    public int contention_newFetchable_write() {
-        return writerWorkload();
-    }
-
-    // -----------------------------------------------------------------------
-    // Heavy contention: 4 readers + 2 writers
-    // -----------------------------------------------------------------------
-
-    /**
-     * Old read path under heavy contention (4 readers competing for the monitor).
-     */
-    @Benchmark
-    @Group("heavyContentionOldFetchable")
-    @GroupThreads(4)
-    public int heavyContention_oldFetchable_read() {
-        List<TopicPartition> fetchable = subscriptionState.fetchablePartitions(tp -> true);
-        int found = 0;
-        for (TopicPartition tp : fetchable) {
-            SubscriptionState.FetchPosition pos = subscriptionState.position(tp);
-            if (pos != null) found++;
+    public int opt3_new_batchedUpdate() {
+        int updated = 0;
+        for (TopicPartition tp : partitions) {
+            if (subscriptionState.tryUpdatingPartitionState(tp, 1000L, 0L, 999L, -1, false, () -> 0L))
+                updated++;
         }
-        return found;
+        return updated;
     }
 
-    /**
-     * Writer threads under heavy contention for old read path.
-     */
+    // --- Contention: 2 readers + 1 writer ---
+
     @Benchmark
-    @Group("heavyContentionOldFetchable")
+    @Group("opt3_contention_old")
     @GroupThreads(2)
-    public int heavyContention_oldFetchable_write() {
-        return writerWorkload();
+    public int opt3_contention_old_read() {
+        return subscriptionState.fetchablePartitions(tp -> true).size();
     }
 
-    /**
-     * New read path under heavy contention (4 readers).
-     */
     @Benchmark
-    @Group("heavyContentionNewFetchable")
-    @GroupThreads(4)
-    public Map<TopicPartition, SubscriptionState.FetchPosition> heavyContention_newFetchable_read() {
-        return subscriptionState.fetchablePositions(tp -> true);
+    @Group("opt3_contention_old")
+    @GroupThreads(1)
+    public int opt3_contention_old_write() {
+        int updated = 0;
+        for (TopicPartition tp : partitions) {
+            subscriptionState.tryUpdatingHighWatermark(tp, 1000L);
+            subscriptionState.tryUpdatingLogStartOffset(tp, 0L);
+            if (subscriptionState.tryUpdatingLastStableOffset(tp, 999L))
+                updated++;
+        }
+        return updated;
     }
 
-    /**
-     * Writer threads under heavy contention for new read path.
-     */
     @Benchmark
-    @Group("heavyContentionNewFetchable")
+    @Group("opt3_contention_new")
     @GroupThreads(2)
-    public int heavyContention_newFetchable_write() {
-        return writerWorkload();
+    public int opt3_contention_new_read() {
+        return subscriptionState.fetchablePartitions(tp -> true).size();
+    }
+
+    @Benchmark
+    @Group("opt3_contention_new")
+    @GroupThreads(1)
+    public int opt3_contention_new_write() {
+        int updated = 0;
+        for (TopicPartition tp : partitions) {
+            if (subscriptionState.tryUpdatingPartitionState(tp, 1000L, 0L, 999L, -1, false, () -> 0L))
+                updated++;
+        }
+        return updated;
+    }
+
+    // =======================================================================
+    // Shared writer workload for contention benchmarks
+    // =======================================================================
+
+    /** Uses tryUpdatingPartitionState to create realistic monitor contention. */
+    private int updateWriter() {
+        int updated = 0;
+        for (TopicPartition tp : partitions) {
+            if (subscriptionState.tryUpdatingPartitionState(tp, 1000L, 0L, 999L, -1, false, () -> 0L))
+                updated++;
+        }
+        return updated;
     }
 }
